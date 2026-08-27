@@ -9,7 +9,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.wxkzd.yuanlu.theme.YuanluTheme
-import com.wxkzd.yuanlu.feature.player.PlayerScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -19,11 +18,10 @@ class MainActivity : ComponentActivity() {
 
     enableEdgeToEdge()
     setContent {
-      YuanluTheme { 
-          Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { 
-              // Temporary routing straight to PlayerScreen for testing M2 features.
-              PlayerScreen() 
-          } 
+      YuanluTheme {
+          Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+              MainNavigation()
+          }
       }
     }
   }

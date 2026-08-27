@@ -1,7 +1,7 @@
 # 远路播客 Android App 开发计划与上下文 (Context & Plan)
 
-> **当前状态**: Phase 2 (M3) 准备中
-> **同步日期**: 2026-08-26
+> **当前状态**: Phase 2 (M3) 已完成，M4 待启动
+> **同步日期**: 2026-08-27
 > **说明**: 本文档汇总了项目的背景上下文、最新开发进度，以及完整的 Android 开发计划，方便在独立仓库中为 AI 助手提供全局 Context。
 
 ---
@@ -42,7 +42,16 @@
   - 接入了 Media3 `PlaybackService` 实现了系统级后台播放与单例管控。
   - 在 `PlayerViewModel` 中实现了 200ms 级的高频播放进度拉取。
   - 完成了双语字幕数组的时间戳二分对齐，并用 Compose `LazyList` 实现了当前句的高亮自动平滑滚动。
-- [ ] **Phase 2 - M3及以后**: 见下方详细开发计划。
+- [x] **Phase 2 - M3 发现与内容浏览** (✅ 完成 2026-08-27)
+  - **数据层**：新增 `ContentApi`/`ContentRepository`，端点契约以后端 `yuanlu` 仓库路由源码为准——`episode/list`(裸数组+page/pageSize 分页)、`episode/detail`(含 userState)、`episode/subtitles`(字幕+签名 audioUrl)、`episode/list-by-podcastid`(信封+hasMore 分页)、`podcast/list`、`podcast/detail`(含 channelPodcasts)、`podcast/search`、`tag/list`、`channel/[name]`。`Subtitle` 模型字段对齐真实线格式 `start/end/word`（原计划文档中的 `startSeconds` 系笔误）。
+  - **首页**：编辑精选横滑 + 最新剧集分页列表（滚动到底自动翻页，不足一页判定 endReached）。
+  - **发现**：播客搜索（400ms 防抖）、分类标签筛选、频道入口（platform 聚合）、两列播客网格。
+  - **播客详情**：头部信息 + 剧集分页列表（最新/最早排序切换）+ 同频道播客推荐；剧集行含收听进度条与 PRO 徽标。
+  - **频道页**：Top Shows 网格 + Top Episodes 列表。
+  - **播放器接真实数据**：`episode/subtitles` 一次性取归一化字幕与签名音频直链；未登录/无权限展示 3 分钟预览 + 登录引导；断点续播（跳过 <30s、接近结尾重播）；UI 升级为封面头部 + Slider 进度 + ±10/30s + 播放/暂停。
+  - **导航与壳**：Navigation3 类型化路由（`PodcastDetailNav`/`ChannelNav`/`PlayerNav`），`rememberViewModelStoreNavEntryDecorator` 提供 entry 级 ViewModel 作用域；登录门禁由 `TokenStore.tokenFlow` 三态驱动（未决/已登录/未登录），冷启动不闪登录页；底部 Tab（Home/Discover/Me），Me 页含登出入口（M9 完整实现）。
+  - **构建链修复**：工作区曾以 `android.builtInKotlin=false` 绕开 AGP 9 与 kapt 的冲突，导致 Hilt 注入失败。本次完成正式迁移：移除 KGP `kotlin-android` 插件（用 AGP 9 内置 Kotlin 2.2.10）、**kapt → KSP**（`2.2.10-2.0.2`）、Hilt 升至 `2.59.2`、补 `material-icons-core` 显式依赖（新版 material3 不再传递）。`gradle.properties` 新增 `android.disallowKotlinSourceSets=false`（KSP 以旧 DSL 注册生成源码，官方豁免开关）。
+- [ ] **Phase 2 - M4及以后**: 见下方详细开发计划。
 
 ---
 
@@ -355,7 +364,7 @@ sealed class ApiError {
 - Media3 Service + 前台通知 + 队列/循环/倍速。
 - 剧集详情、OSS 签名 URL 播放、**字幕同步 + 词级高亮 + 点击跳转**、断点续传。
 
-### M3 — 发现与内容浏览（~1.5 周）🚧
+### M3 — 发现与内容浏览（~1.5 周）✅
 - 首页、发现、频道、分类、搜索、播客详情、剧集列表、分页。
 
 ### M4 — 收藏 / 历史 / 学习路径（~1 周）

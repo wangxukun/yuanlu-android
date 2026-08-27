@@ -1,55 +1,82 @@
 package com.wxkzd.yuanlu.ui.main
 
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation3.runtime.NavKey
-import com.wxkzd.yuanlu.data.DefaultDataRepository
-import com.wxkzd.yuanlu.theme.YuanluTheme
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.wxkzd.yuanlu.feature.discover.DiscoverScreen
+import com.wxkzd.yuanlu.feature.discover.DiscoverViewModel
+import com.wxkzd.yuanlu.feature.home.HomeScreen
+import com.wxkzd.yuanlu.feature.home.HomeViewModel
+import com.wxkzd.yuanlu.feature.profile.ProfileScreen
+import com.wxkzd.yuanlu.feature.profile.ProfileViewModel
+
+private data class TabItem(
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)
+
+private val TABS = listOf(
+    TabItem("Home", Icons.Filled.Home),
+    TabItem("Discover", Icons.Filled.Search),
+    TabItem("Me", Icons.Filled.Person)
+)
 
 @Composable
 fun MainScreen(
-  onItemClick: (NavKey) -> Unit,
-  modifier: Modifier = Modifier,
-  viewModel: MainScreenViewModel = viewModel { MainScreenViewModel(DefaultDataRepository()) },
+    onOpenPodcast: (String) -> Unit,
+    onOpenChannel: (String) -> Unit,
+    onOpenEpisode: (String) -> Unit
 ) {
-  val state by viewModel.uiState.collectAsStateWithLifecycle()
-  when (state) {
-    MainScreenUiState.Loading -> {
-      // Blank
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                TABS.forEachIndexed { index, tab ->
+                    NavigationBarItem(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        icon = { Icon(tab.icon, contentDescription = tab.label) },
+                        label = { Text(tab.label) }
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            when (selectedTab) {
+                0 -> HomeScreen(
+                    viewModel = hiltViewModel<HomeViewModel>(),
+                    onOpenPodcast = onOpenPodcast,
+                    onOpenEpisode = onOpenEpisode
+                )
+                1 -> DiscoverScreen(
+                    viewModel = hiltViewModel<DiscoverViewModel>(),
+                    onOpenPodcast = onOpenPodcast,
+                    onOpenChannel = onOpenChannel
+                )
+                2 -> ProfileScreen(viewModel = hiltViewModel<ProfileViewModel>())
+            }
+        }
     }
-    is MainScreenUiState.Success -> {
-      MainScreen(data = (state as MainScreenUiState.Success).data, modifier = modifier)
-    }
-    is MainScreenUiState.Error -> {
-      Text("Error loading data: ${(state as MainScreenUiState.Error).throwable.message}")
-    }
-  }
-}
-
-@Composable
-internal fun MainScreen(data: List<String>, modifier: Modifier = Modifier) {
-  Column(modifier) { data.forEach { Greeting(it) } }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-  Text(text = "Hello $name!", modifier = modifier)
-}
-
-@Preview(showBackground = true)
-@Composable
-fun MainScreenPreview() {
-  YuanluTheme { MainScreen(listOf("Android")) }
-}
-
-@Preview(showBackground = true, widthDp = 340)
-@Composable
-fun MainScreenPortraitPreview() {
-  YuanluTheme { MainScreen(listOf("Android")) }
 }

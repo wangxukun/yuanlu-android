@@ -1,6 +1,5 @@
 package com.wxkzd.yuanlu.core.media
 
-import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -31,27 +30,36 @@ class PlayerController @Inject constructor(
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                _playerState.update { 
+                _playerState.update {
                     it.copy(
                         playbackState = playbackState,
                         duration = exoPlayer.duration.coerceAtLeast(0L)
-                    ) 
+                    )
                 }
             }
         })
     }
 
-    fun play(episode: Episode) {
+    fun play(episode: Episode, startPositionMs: Long = 0L) {
         val mediaItem = MediaItem.Builder()
             .setUri(episode.audioUrl)
             .setMediaId(episode.episodeid)
             .build()
-            
+
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
+        if (startPositionMs > 0) {
+            exoPlayer.seekTo(startPositionMs)
+        }
         exoPlayer.play()
-        
-        _playerState.update { it.copy(currentEpisode = episode) }
+
+        _playerState.update {
+            it.copy(
+                currentEpisode = episode,
+                currentPosition = startPositionMs,
+                duration = if (episode.duration > 0) episode.duration * 1000L else 0L
+            )
+        }
     }
 
     fun togglePlayPause() {
@@ -63,8 +71,12 @@ class PlayerController @Inject constructor(
     }
 
     fun seekTo(positionMs: Long) {
-        exoPlayer.seekTo(positionMs)
+        exoPlayer.seekTo(positionMs.coerceIn(0L, exoPlayer.duration.takeIf { it > 0 } ?: Long.MAX_VALUE))
         _playerState.update { it.copy(currentPosition = positionMs) }
+    }
+
+    fun seekBy(deltaMs: Long) {
+        seekTo(exoPlayer.currentPosition + deltaMs)
     }
 
     private fun startProgressUpdate() {
