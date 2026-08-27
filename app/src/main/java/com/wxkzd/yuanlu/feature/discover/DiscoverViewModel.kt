@@ -17,6 +17,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** 频道入口条目（由播客列表按 platform 聚合） */
+data class ChannelEntry(
+    val name: String,
+    val podcastCount: Int
+)
+
 data class DiscoverUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -27,8 +33,11 @@ data class DiscoverUiState(
     val tags: List<Tag> = emptyList(),
     val selectedTag: Tag? = null,
     val podcasts: List<Podcast> = emptyList(),
-    /** 由播客列表聚合出的频道（platform）名 */
-    val channels: List<String> = emptyList()
+    // ---- 区块数据（均由全量播客列表客户端派生） ----
+    val trending: List<Podcast> = emptyList(),      // totalPlays 降序 TOP10
+    val editorPicks: List<Podcast> = emptyList(),   // isEditorPick
+    val newPodcasts: List<Podcast> = emptyList(),   // createAt 降序前 8
+    val channels: List<ChannelEntry> = emptyList()  // platform 聚合 + 播客数
 )
 
 @OptIn(FlowPreview::class)
@@ -71,9 +80,17 @@ class DiscoverViewModel @Inject constructor(
                             isLoading = false,
                             podcasts = podcasts,
                             tags = tags,
-                            channels = podcasts.mapNotNull { p -> p.platform?.takeIf(String::isNotBlank) }
-                                .distinct()
-                                .sorted()
+                            trending = podcasts.sortedByDescending { p -> p.totalPlays }.take(TRENDING_LIMIT),
+                            editorPicks = podcasts.filter { p -> p.isEditorPick },
+                            newPodcasts = podcasts
+                                .filter { p -> p.createAt != null }
+                                .sortedByDescending { p -> p.createAt }
+                                .take(NEW_LIMIT),
+                            channels = podcasts
+                                .groupBy { p -> p.platform }
+                                .filterKeys { name -> !name.isNullOrBlank() }
+                                .map { (name, group) -> ChannelEntry(name!!, group.size) }
+                                .sortedByDescending { entry -> entry.podcastCount }
                         )
                     }
                 }
@@ -89,6 +106,11 @@ class DiscoverViewModel @Inject constructor(
 
     fun onQueryChange(query: String) {
         _uiState.update { it.copy(query = query) }
+        // 清空时立即回浏览态，不等防抖（避免残留旧结果 400ms）
+        if (query.isBlank()) {
+            searchJob?.cancel()
+            _uiState.update { it.copy(searchResults = null, isSearching = false) }
+        }
         queryInput.value = query
     }
 
@@ -112,5 +134,10 @@ class DiscoverViewModel @Inject constructor(
 
     fun selectTag(tag: Tag?) {
         _uiState.update { it.copy(selectedTag = tag) }
+    }
+
+    companion object {
+        const val TRENDING_LIMIT = 10
+        const val NEW_LIMIT = 8
     }
 }

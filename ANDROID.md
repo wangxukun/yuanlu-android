@@ -1,7 +1,7 @@
 # 远路播客 Android App 开发计划与上下文 (Context & Plan)
 
-> **当前状态**: Phase 2 (M3) 已完成，M4 待启动
-> **同步日期**: 2026-08-27
+> **当前状态**: Phase 2 (M3) 已完成（含发现页 UI 重设计与品牌主题同步），M4 待启动
+> **同步日期**: 2026-08-28
 > **说明**: 本文档汇总了项目的背景上下文、最新开发进度，以及完整的 Android 开发计划，方便在独立仓库中为 AI 助手提供全局 Context。
 
 ---
@@ -51,6 +51,14 @@
   - **播放器接真实数据**：`episode/subtitles` 一次性取归一化字幕与签名音频直链；未登录/无权限展示 3 分钟预览 + 登录引导；断点续播（跳过 <30s、接近结尾重播）；UI 升级为封面头部 + Slider 进度 + ±10/30s + 播放/暂停。
   - **导航与壳**：Navigation3 类型化路由（`PodcastDetailNav`/`ChannelNav`/`PlayerNav`），`rememberViewModelStoreNavEntryDecorator` 提供 entry 级 ViewModel 作用域；登录门禁由 `TokenStore.tokenFlow` 三态驱动（未决/已登录/未登录），冷启动不闪登录页；底部 Tab（Home/Discover/Me），Me 页含登出入口（M9 完整实现）。
   - **构建链修复**：工作区曾以 `android.builtInKotlin=false` 绕开 AGP 9 与 kapt 的冲突，导致 Hilt 注入失败。本次完成正式迁移：移除 KGP `kotlin-android` 插件（用 AGP 9 内置 Kotlin 2.2.10）、**kapt → KSP**（`2.2.10-2.0.2`）、Hilt 升至 `2.59.2`、补 `material-icons-core` 显式依赖（新版 material3 不再传递）。`gradle.properties` 新增 `android.disallowKotlinSourceSets=false`（KSP 以旧 DSL 注册生成源码，官方豁免开关）。
+- [x] **Phase 2 - M3.5 发现页 UI 重设计 + 品牌主题同步** (✅ 完成 2026-08-28，模拟器实测通过)
+  - **品牌主题**：`theme/Color.kt` 全量对齐 Web 端（`yuanlu/app/globals.css`）——远青 primary `#1F7A5C`/深色 `#4DA989`、暖纸底 `#FAF8F3`/深色墨 `#151310`、曙光橙 secondary `#D98A17`，`Theme.kt` 增补 container/outline/error 全套映射，深色模式像素级验证通过。
+  - **后端小幅扩展（向后兼容）**：`yuanlu` 仓库 `app/api/podcast/list/route.ts` 的 select 补 `totalPlays/followerCount/createAt/_count.episode`（扁平化为 `episodeCount`），支撑热门榜/新节目/频道聚合的客户端派生。
+  - **发现页重写**：区块结构对齐 Web 发现页——`Trending`（横滑排名卡，金银铜墨徽章 + 收听量）→ `Editor's Picks`（分类 pill）→ `New Shows`（NEW 徽章）→ `Channels`（品牌色频道卡，platform 聚合 + 播客数）→ 分类 FilterChip → 两列播客网格；搜索框升级 28dp 胶囊（BasicTextField）；加载态改 Shimmer 骨架屏（纯 Compose 无新依赖）；空区块自动折叠。
+  - **共享组件升级**（首页/频道页同步受益）：`CoverImage` 圆角参数化、`PodcastCard` 增平台眉标（大写+字距）/徽章/pill/描述槽位、`SectionHeader` 支持 action、新增 `ShimmerBox`/`EyebrowText`/`formatPlays`。
+  - **ViewModel**：`DiscoverUiState` 新增 `trending`(totalPlays 降序 TOP10)/`editorPicks`/`newPodcasts`(createAt 降序前 8)/`channels`(`ChannelEntry(name, count)`) 区块字段，一次拉取客户端派生；补 `DiscoverViewModelTest` 4 例（区块派生/截断/空折叠/标签）。
+  - **交互打磨（实测反馈修复）**：排名徽章金色压深 `#DAA520` + 银色调暗 + 全徽章 1dp 描边（白底封面辨识度）；搜索态系统返回键先清空回浏览态（`BackHandler`，不再直接退出应用），清空输入时即时退出搜索态不等防抖。
+  - **实测环境备注**：本机模拟器（Medium_Phone, 1080x2400）+ `yuanlu` dev 服务（3000 端口，模拟器经 `10.0.2.2` 访问）联调验证；后端建有一个一次性测试账号 `android-preview@test.yuanlu.com` / `Yuanlu2026!`（不需要可删）。
 - [ ] **Phase 2 - M4及以后**: 见下方详细开发计划。
 
 ---

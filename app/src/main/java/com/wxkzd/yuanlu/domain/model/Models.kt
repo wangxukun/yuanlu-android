@@ -56,6 +56,7 @@ data class Podcast(
     val followerCount: Int = 0,
     val totalPlays: Int = 0,
     val episodeCount: Int = 0,
+    val createAt: String? = null,
     val tags: List<Tag> = emptyList()
 )
 

@@ -12,35 +12,47 @@ import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
     primary = DarkPrimary,
+    onPrimary = DarkOnPrimary,
+    primaryContainer = DarkPrimaryContainer,
+    onPrimaryContainer = DarkOnPrimaryContainer,
     secondary = DarkSecondary,
-    tertiary = DarkAccent,
-    background = DarkBase100,
-    surface = DarkBase200,
-    onPrimary = DarkBaseContent,
-    onSecondary = DarkBaseContent,
-    onTertiary = DarkBaseContent,
-    onBackground = DarkBaseContent,
-    onSurface = DarkBaseContent,
+    onSecondary = DarkOnSecondary,
+    tertiary = DarkTertiary,
+    onTertiary = DarkOnPrimary,
+    background = DarkBackground,
+    onBackground = DarkOnBackground,
+    surface = DarkSurface,
+    onSurface = DarkOnSurface,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    outline = DarkOutline,
+    error = DarkError
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = LightPrimary,
+    onPrimary = LightOnPrimary,
+    primaryContainer = LightPrimaryContainer,
+    onPrimaryContainer = LightOnPrimaryContainer,
     secondary = LightSecondary,
-    tertiary = LightAccent,
-    background = LightBase100,
-    surface = LightBase200,
-    onPrimary = LightBase100,
-    onSecondary = LightBase100,
-    onTertiary = LightBase100,
-    onBackground = LightBaseContent,
-    onSurface = LightBaseContent,
+    onSecondary = LightOnSecondary,
+    tertiary = LightTertiary,
+    onTertiary = LightOnPrimary,
+    background = LightBackground,
+    onBackground = LightOnBackground,
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    outline = LightOutline,
+    error = LightError
 )
 
 @Composable
 fun YuanluTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
   // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = false, // Disabled dynamic color to strictly follow DaisyUI
+  dynamicColor: Boolean = false, // Disabled dynamic color to strictly follow the Yuanlu brand palette
   content: @Composable () -> Unit,
 ) {
   val colorScheme =

@@ -1,0 +1,158 @@
+package com.wxkzd.yuanlu.feature.discover
+
+import com.wxkzd.yuanlu.core.network.Result
+import com.wxkzd.yuanlu.domain.model.ChannelData
+import com.wxkzd.yuanlu.domain.model.Episode
+import com.wxkzd.yuanlu.domain.model.EpisodePage
+import com.wxkzd.yuanlu.domain.model.Podcast
+import com.wxkzd.yuanlu.domain.model.PodcastDetail
+import com.wxkzd.yuanlu.domain.model.SubtitleBundle
+import com.wxkzd.yuanlu.domain.model.Tag
+import com.wxkzd.yuanlu.domain.repository.ContentRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class DiscoverViewModelTest {
+
+    private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    private fun podcast(
+        id: String,
+        plays: Int = 0,
+        editorPick: Boolean = false,
+        createAt: String? = null,
+        platform: String? = null
+    ) = Podcast(
+        podcastid = id,
+        title = id,
+        totalPlays = plays,
+        isEditorPick = editorPick,
+        createAt = createAt,
+        platform = platform
+    )
+
+    @Test
+    fun `load derives trending picks new shows and channels`() = runTest(dispatcher) {
+        val podcasts = listOf(
+            podcast("a", plays = 100, editorPick = true, createAt = "2026-08-01T00:00:00.000Z", platform = "Spotify"),
+            podcast("b", plays = 500, createAt = "2026-08-20T00:00:00.000Z", platform = "Spotify"),
+            podcast("c", plays = 300, createAt = "2026-07-01T00:00:00.000Z", platform = "Apple Podcasts"),
+            podcast("d", plays = 50, editorPick = true, platform = null)
+        )
+        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = podcasts))
+        runCurrent()
+        // debounce 收集器不触发搜索（query 为空）
+        val state = viewModel.uiState.value
+
+        assertEquals(listOf("b", "c", "a", "d"), state.trending.map { it.podcastid })
+        assertEquals(listOf("a", "d"), state.editorPicks.map { it.podcastid })
+        assertEquals(listOf("b", "a", "c"), state.newPodcasts.map { it.podcastid })
+        assertEquals(2, state.channels.size)
+        assertEquals("Spotify", state.channels.first().name)
+        assertEquals(2, state.channels.first().podcastCount)
+    }
+
+    @Test
+    fun `trending truncated to limit and new shows to limit`() = runTest(dispatcher) {
+        val podcasts = (1..15).map { i ->
+            podcast(
+                id = "p$i",
+                plays = i,
+                createAt = "2026-08-%02d".format(i)
+            )
+        }
+        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = podcasts))
+        runCurrent()
+
+        assertEquals(DiscoverViewModel.TRENDING_LIMIT, viewModel.uiState.value.trending.size)
+        assertEquals(DiscoverViewModel.NEW_LIMIT, viewModel.uiState.value.newPodcasts.size)
+        // trending 按播放量降序
+        assertEquals("p15", viewModel.uiState.value.trending.first().podcastid)
+    }
+
+    @Test
+    fun `empty sections collapse without errors`() = runTest(dispatcher) {
+        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = emptyList()))
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.trending.isEmpty())
+        assertTrue(state.editorPicks.isEmpty())
+        assertTrue(state.newPodcasts.isEmpty())
+        assertTrue(state.channels.isEmpty())
+    }
+
+    @Test
+    fun `selectTag filters grid content`() = runTest(dispatcher) {
+        val tag = Tag(1, "Business")
+        val withTag = Podcast(podcastid = "a", title = "A", tags = listOf(tag))
+        val without = Podcast(podcastid = "b", title = "B")
+        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = listOf(withTag, without)))
+        runCurrent()
+
+        viewModel.selectTag(tag)
+        runCurrent()
+        // 过滤逻辑在 Composable 内执行，这里验证状态记录了选中标签
+        assertEquals(tag, viewModel.uiState.value.selectedTag)
+
+        viewModel.selectTag(null)
+        assertEquals(null, viewModel.uiState.value.selectedTag)
+    }
+}
+
+private class FakeContentRepository(
+    private val podcasts: List<Podcast> = emptyList()
+) : ContentRepository {
+
+    override suspend fun getLatestEpisodes(page: Int, pageSize: Int): Result<List<Episode>> =
+        Result.Success(emptyList())
+
+    override suspend fun getEpisode(episodeid: String): Result<Episode> =
+        Result.Success(Episode(episodeid = episodeid, title = ""))
+
+    override suspend fun getSubtitles(episodeid: String): Result<SubtitleBundle> =
+        Result.Success(SubtitleBundle(emptyList(), null))
+
+    override suspend fun getPodcastEpisodes(
+        podcastid: String,
+        page: Int,
+        limit: Int,
+        ascending: Boolean
+    ): Result<EpisodePage> = Result.Success(EpisodePage(emptyList(), 0, false))
+
+    override suspend fun getPodcasts(): Result<List<Podcast>> =
+        Result.Success(podcasts)
+
+    override suspend fun getPodcastDetail(podcastid: String): Result<PodcastDetail> =
+        Result.Success(PodcastDetail(Podcast(podcastid = podcastid, title = ""), false, emptyList()))
+
+    override suspend fun searchPodcasts(query: String): Result<List<Podcast>> =
+        Result.Success(emptyList())
+
+    override suspend fun getTags(query: String?): Result<List<Tag>> =
+        Result.Success(emptyList())
+
+    override suspend fun getChannel(name: String): Result<ChannelData> =
+        Result.Success(ChannelData(name, 0, emptyList(), emptyList()))
+}

@@ -1,5 +1,11 @@
 package com.wxkzd.yuanlu.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -23,14 +30,19 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -49,9 +61,10 @@ private const val DEFAULT_COVER = "default_cover_url"
 fun CoverImage(
     url: String?,
     contentDescription: String?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 16.dp
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(cornerRadius)
     val valid = !url.isNullOrBlank() && url != DEFAULT_COVER && url.startsWith("http")
     if (valid) {
         AsyncImage(
@@ -68,7 +81,7 @@ fun CoverImage(
                     Brush.linearGradient(
                         listOf(
                             MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.colorScheme.secondaryContainer
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.25f)
                         )
                     )
                 ),
@@ -83,14 +96,48 @@ fun CoverImage(
     }
 }
 
+/** 平台/分类眉标：大写小字 + 字距（对齐 Web 端卡片排版） */
 @Composable
-fun SectionHeader(title: String, modifier: Modifier = Modifier) {
+fun EyebrowText(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = modifier.padding(vertical = 8.dp)
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        letterSpacing = 1.4.sp,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier
     )
+}
+
+@Composable
+fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
+        )
+        if (actionLabel != null && onAction != null) {
+            Text(
+                text = actionLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { onAction() }
+            )
+        }
+    }
 }
 
 @Composable
@@ -109,7 +156,8 @@ fun EpisodeRow(
             CoverImage(
                 url = episode.coverUrl,
                 contentDescription = episode.title,
-                modifier = Modifier.size(64.dp)
+                modifier = Modifier.size(64.dp),
+                cornerRadius = 12.dp
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -159,25 +207,52 @@ fun EpisodeRow(
     }
 }
 
+/**
+ * 播客卡片：封面（含可选右上角胶囊徽章）→ 平台眉标 → 标题 → 集数/收听量 meta。
+ * 与 Web 端 components/ui/PodcastCard.tsx 的信息层级一一对应。
+ */
 @Composable
 fun PodcastCard(
     podcast: Podcast,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    badge: String? = null,
+    showPlays: Boolean = false,
+    pill: String? = null,
+    showDescription: Boolean = false
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() }
     ) {
-        CoverImage(
-            url = podcast.coverUrl,
-            contentDescription = podcast.title,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-        )
+        Box {
+            CoverImage(
+                url = podcast.coverUrl,
+                contentDescription = podcast.title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+            )
+            if (badge != null) {
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(50)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(6.dp))
+        podcast.platform?.let { EyebrowText(it) }
         Text(
             text = podcast.title,
             style = MaterialTheme.typography.bodyMedium,
@@ -187,7 +262,7 @@ fun PodcastCard(
         )
         val meta = listOfNotNull(
             podcast.episodeCount.takeIf { it > 0 }?.let { "$it episodes" },
-            podcast.platform
+            if (showPlays) formatPlays(podcast.totalPlays) else null
         ).joinToString(" · ")
         if (meta.isNotEmpty()) {
             Text(
@@ -198,7 +273,64 @@ fun PodcastCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        if (showDescription && !podcast.description.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = podcast.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (pill != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = pill,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(50)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+            )
+        }
     }
+}
+
+/** 骨架屏扫光占位块 */
+@Composable
+fun ShimmerBox(
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 12.dp
+) {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerProgress"
+    )
+    val base = MaterialTheme.colorScheme.surfaceVariant
+    val highlight = MaterialTheme.colorScheme.surface
+    val width = 400f
+    val start = progress * width * 2 - width
+    Box(
+        modifier
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(base, highlight, base),
+                    start = Offset(start, 0f),
+                    end = Offset(start + width, width / 4)
+                )
+            )
+    )
 }
 
 @Composable
@@ -260,6 +392,17 @@ fun formatMillis(ms: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(Locale.US, minutes, seconds)
+}
+
+/** 1234 -> "1.2k listens"；无播放量返回 null 语义由调用方处理 */
+fun formatPlays(count: Int): String? {
+    if (count <= 0) return null
+    return if (count >= 1000) {
+        val k = count / 1000.0
+        if (k >= 100) "${k.toInt()}k listens" else String.format(Locale.US, "%.1fk listens", k)
+    } else {
+        "$count listens"
+    }
 }
 
 /** "2026-08-01T12:00:00.000Z" -> "2026-08-01"；解析失败取前 10 位 */

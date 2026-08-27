@@ -137,6 +137,7 @@ data class PodcastDto(
     val followerCount: Int? = null,
     val totalPlays: Int? = null,
     val episodeCount: Int? = null,
+    val createAt: String? = null,
     val tags: List<TagDto>? = null
 ) {
     fun toDomain() = Podcast(
@@ -149,6 +150,7 @@ data class PodcastDto(
         followerCount = followerCount ?: 0,
         totalPlays = totalPlays ?: 0,
         episodeCount = episodeCount ?: 0,
+        createAt = createAt,
         tags = tags.orEmpty().map { it.toDomain() }
     )
 }
