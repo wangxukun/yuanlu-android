@@ -4,7 +4,10 @@ import com.wxkzd.yuanlu.core.auth.TokenStore
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.AuthApi
 import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
+import com.wxkzd.yuanlu.data.remote.dto.SmsSendRequest
+import com.wxkzd.yuanlu.domain.model.UserProfile
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
+import com.wxkzd.yuanlu.domain.repository.SmsSendStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -54,5 +57,44 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun logout() {
         tokenStore.clear()
+    }
+
+    override suspend fun sendSmsCode(phone: String): Result<SmsSendStatus> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.sendSmsCode(SmsSendRequest(phone = phone))
+                if (response.success) {
+                    Result.Success(SmsSendStatus(requireCaptcha = false))
+                } else {
+                    // 业务失败（含风控/限频）均为 200 + success=false
+                    Result.Error(
+                        code = response.code ?: 400,
+                        message = if (response.requireCaptcha) {
+                            "触发安全验证，请改用邮箱登录"
+                        } else {
+                            response.error ?: "验证码发送失败"
+                        }
+                    )
+                }
+            } catch (e: Exception) {
+                Result.NetworkError
+            }
+        }
+    }
+
+    override suspend fun getProfile(): Result<UserProfile> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Result.Success(api.userProfile().toDomain())
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 401) {
+                    Result.Error(401, "请先登录")
+                } else {
+                    Result.Error(e.code(), "加载用户信息失败")
+                }
+            } catch (e: Exception) {
+                Result.NetworkError
+            }
+        }
     }
 }

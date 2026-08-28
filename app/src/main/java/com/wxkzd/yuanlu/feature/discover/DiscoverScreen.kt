@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +57,9 @@ import com.wxkzd.yuanlu.ui.components.PodcastCard
 import com.wxkzd.yuanlu.ui.components.SectionHeader
 import com.wxkzd.yuanlu.ui.components.ShimmerBox
 import com.wxkzd.yuanlu.ui.components.formatPlays
+
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.ui.text.style.TextAlign
 
 /** 热门榜排名徽章配色，对齐 Web 端 01 金 / 02 银 / 03 铜 / 其余墨；金色压深保证白底封面上的辨识度 */
 private val RankBadgeColors = listOf(
@@ -73,141 +77,25 @@ private val RankBadgeBorder = Color(0x33000000)
 fun DiscoverScreen(
     viewModel: DiscoverViewModel,
     onOpenPodcast: (String) -> Unit,
-    onOpenChannel: (String) -> Unit
+    onOpenChannel: (String) -> Unit,
+    onViewAllChannels: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // 搜索态下系统返回键先清空搜索返回浏览态，而不是直接退出应用
-    BackHandler(enabled = state.query.isNotEmpty()) {
-        viewModel.onQueryChange("")
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        DiscoverHeader(
-            query = state.query,
-            onQueryChange = viewModel::onQueryChange
-        )
-
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         when {
             state.isLoading -> DiscoverSkeleton()
             state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::load)
-            state.searchResults != null -> SearchResults(
-                results = state.searchResults!!,
-                isSearching = state.isSearching,
-                query = state.query,
-                onOpenPodcast = onOpenPodcast
-            )
             else -> BrowseContent(
                 state = state,
                 onSelectTag = viewModel::selectTag,
                 onOpenPodcast = onOpenPodcast,
-                onOpenChannel = onOpenChannel
+                onOpenChannel = onOpenChannel,
+                onViewAllChannels = onViewAllChannels
             )
         }
     }
 }
-
-@Composable
-private fun DiscoverHeader(
-    query: String,
-    onQueryChange: (String) -> Unit
-) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Text(
-            text = "Discover",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
-        )
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(start = 16.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    decorationBox = { innerTextField ->
-                        Box(modifier = Modifier.padding(vertical = 12.dp)) {
-                            if (query.isEmpty()) {
-                                Text(
-                                    text = "Search podcasts",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            innerTextField()
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            imageVector = Icons.Filled.Clear,
-                            contentDescription = "Clear",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ---------- 搜索态 ----------
-
-@Composable
-private fun SearchResults(
-    results: List<Podcast>,
-    isSearching: Boolean,
-    query: String,
-    onOpenPodcast: (String) -> Unit
-) {
-    when {
-        isSearching -> DiscoverSkeleton()
-        results.isEmpty() -> EmptyBox("No podcasts found for \"$query\"")
-        else -> LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            results.chunked(2).forEachIndexed { rowIndex, rowItems ->
-                item(key = "row_$rowIndex") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        rowItems.forEach { podcast ->
-                            Box(modifier = Modifier.weight(1f)) {
-                                PodcastCard(
-                                    podcast = podcast,
-                                    onClick = { onOpenPodcast(podcast.podcastid) },
-                                    showPlays = true,
-                                    showDescription = true
-                                )
-                            }
-                        }
-                        if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ---------- 浏览态 ----------
 
 @Composable
@@ -215,7 +103,8 @@ private fun BrowseContent(
     state: DiscoverUiState,
     onSelectTag: (Tag?) -> Unit,
     onOpenPodcast: (String) -> Unit,
-    onOpenChannel: (String) -> Unit
+    onOpenChannel: (String) -> Unit,
+    onViewAllChannels: () -> Unit
 ) {
     val filtered = state.selectedTag
         ?.let { tag -> state.podcasts.filter { p -> p.tags.any { it.id == tag.id } } }
@@ -229,21 +118,26 @@ private fun BrowseContent(
         // ---- 热门节目 ----
         if (state.trending.isNotEmpty()) {
             item(key = "trending_header") {
-                SectionHeader("Trending", modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp))
+                SectionHeader("热门榜", modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp))
             }
-            item(key = "trending_row") {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(state.trending, key = { it.podcastid }) { podcast ->
-                        Box(modifier = Modifier.width(150.dp)) {
-                            RankedPodcastCard(
-                                podcast = podcast,
-                                rank = state.trending.indexOf(podcast),
-                                onClick = { onOpenPodcast(podcast.podcastid) }
-                            )
+            state.trending.take(6).chunked(2).forEachIndexed { rowIndex, rowItems ->
+                item(key = "trending_row_$rowIndex") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowItems.forEach { podcast ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                RankedPodcastCard(
+                                    podcast = podcast,
+                                    rank = state.trending.indexOf(podcast),
+                                    onClick = { onOpenPodcast(podcast.podcastid) }
+                                )
+                            }
                         }
+                        if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -252,21 +146,26 @@ private fun BrowseContent(
         // ---- 为您推荐（编辑精选） ----
         if (state.editorPicks.isNotEmpty()) {
             item(key = "picks_header") {
-                SectionHeader("Editor's Picks", modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp))
+                SectionHeader("为您推荐", modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp))
             }
-            item(key = "picks_row") {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(state.editorPicks, key = { it.podcastid }) { podcast ->
-                        Box(modifier = Modifier.width(150.dp)) {
-                            PodcastCard(
-                                podcast = podcast,
-                                onClick = { onOpenPodcast(podcast.podcastid) },
-                                pill = podcast.tags.firstOrNull()?.name
-                            )
+            state.editorPicks.take(6).chunked(2).forEachIndexed { rowIndex, rowItems ->
+                item(key = "picks_row_$rowIndex") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowItems.forEach { podcast ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                PodcastCard(
+                                    podcast = podcast,
+                                    onClick = { onOpenPodcast(podcast.podcastid) },
+                                    pill = podcast.tags.firstOrNull()?.name
+                                )
+                            }
                         }
+                        if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -275,21 +174,26 @@ private fun BrowseContent(
         // ---- 新节目 ----
         if (state.newPodcasts.isNotEmpty()) {
             item(key = "new_header") {
-                SectionHeader("New Shows", modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp))
+                SectionHeader("新节目", modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp))
             }
-            item(key = "new_row") {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(state.newPodcasts, key = { it.podcastid }) { podcast ->
-                        Box(modifier = Modifier.width(150.dp)) {
-                            PodcastCard(
-                                podcast = podcast,
-                                onClick = { onOpenPodcast(podcast.podcastid) },
-                                badge = "NEW"
-                            )
+            state.newPodcasts.take(6).chunked(2).forEachIndexed { rowIndex, rowItems ->
+                item(key = "new_row_$rowIndex") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowItems.forEach { podcast ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                PodcastCard(
+                                    podcast = podcast,
+                                    onClick = { onOpenPodcast(podcast.podcastid) },
+                                    badge = "新"
+                                )
+                            }
                         }
+                        if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -298,18 +202,30 @@ private fun BrowseContent(
         // ---- 推荐频道 ----
         if (state.channels.isNotEmpty()) {
             item(key = "channels_header") {
-                SectionHeader("Channels", modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp))
+                SectionHeader(
+                    title = "推荐频道",
+                    actionLabel = "查看更多",
+                    onAction = onViewAllChannels,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp)
+                )
             }
-            item(key = "channels_row") {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(state.channels, key = { it.name }) { channel ->
-                        ChannelCard(
-                            channel = channel,
-                            onClick = { onOpenChannel(channel.name) }
-                        )
+            state.channels.take(6).chunked(2).forEachIndexed { rowIndex, rowItems ->
+                item(key = "channels_row_$rowIndex") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowItems.forEach { channel ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                ChannelCard(
+                                    channel = channel,
+                                    onClick = { onOpenChannel(channel.name) }
+                                )
+                            }
+                        }
+                        if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -328,7 +244,7 @@ private fun BrowseContent(
                     FilterChip(
                         selected = state.selectedTag == null,
                         onClick = { onSelectTag(null) },
-                        label = { Text("All") }
+                        label = { Text("全部") }
                     )
                     state.tags.forEach { tag ->
                         FilterChip(
@@ -344,15 +260,15 @@ private fun BrowseContent(
         // ---- 全部播客网格 ----
         item(key = "grid_header") {
             SectionHeader(
-                if (state.selectedTag != null) state.selectedTag!!.name else "All Podcasts",
+                if (state.selectedTag != null) state.selectedTag!!.name else "全部播客",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp)
             )
         }
         if (filtered.isEmpty()) {
             item(key = "empty") {
                 EmptyBox(
-                    if (state.podcasts.isEmpty()) "No podcasts yet"
-                    else "No podcasts in this category"
+                    if (state.podcasts.isEmpty()) "暂无播客"
+                    else "该分类暂无播客"
                 )
             }
         } else {
@@ -449,7 +365,7 @@ private fun RankedPodcastCard(
 
 /** 频道入口卡：品牌色底、无封面（对齐 Web 端推荐频道卡片） */
 @Composable
-private fun ChannelCard(
+fun ChannelCard(
     channel: ChannelEntry,
     onClick: () -> Unit
 ) {
@@ -457,37 +373,58 @@ private fun ChannelCard(
         color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
-            .width(160.dp)
+            .fillMaxWidth()
+            .aspectRatio(1f)
             .clickable { onClick() }
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                shape = CircleShape,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.padding(5.dp)
-                )
-            }
             Text(
                 text = channel.name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                maxLines = 2
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "${channel.podcastCount} shows",
+                text = "${channel.podcastCount} 档节目",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(50),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Computer,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "频道主页",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }

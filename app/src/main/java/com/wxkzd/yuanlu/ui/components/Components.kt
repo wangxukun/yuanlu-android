@@ -360,7 +360,7 @@ fun ErrorBox(
         )
         if (onRetry != null) {
             Button(onClick = onRetry, modifier = Modifier.padding(top = 16.dp)) {
-                Text("Retry")
+                Text("重试")
             }
         }
     }

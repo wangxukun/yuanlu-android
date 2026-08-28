@@ -47,7 +47,7 @@ fun HomeScreen(
     when {
         state.isLoading -> LoadingBox()
         state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::refresh)
-        state.episodes.isEmpty() && state.editorPicks.isEmpty() -> EmptyBox("No episodes yet")
+        state.episodes.isEmpty() && state.editorPicks.isEmpty() -> EmptyBox("暂无内容")
         else -> HomeContent(
             state = state,
             onOpenPodcast = onOpenPodcast,
@@ -85,7 +85,7 @@ private fun HomeContent(
     ) {
         if (state.editorPicks.isNotEmpty()) {
             item(key = "picks_header") {
-                SectionHeader("Editor's Picks", modifier = Modifier.padding(horizontal = 16.dp))
+                SectionHeader("为您推荐", modifier = Modifier.padding(horizontal = 16.dp))
             }
             item(key = "picks_row") {
                 LazyRow(
@@ -100,7 +100,7 @@ private fun HomeContent(
                 }
             }
             item(key = "latest_header") {
-                SectionHeader("Latest Episodes", modifier = Modifier.padding(horizontal = 16.dp))
+                SectionHeader("最新单集", modifier = Modifier.padding(horizontal = 16.dp))
             }
         }
         itemsIndexed(state.episodes, key = { _, episode -> episode.episodeid }) { index, episode ->
@@ -122,7 +122,7 @@ private fun HomeContent(
                 when {
                     state.isLoadingMore -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     state.endReached && state.episodes.isNotEmpty() -> Text(
-                        text = "You've reached the end",
+                        text = "已经到底了",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

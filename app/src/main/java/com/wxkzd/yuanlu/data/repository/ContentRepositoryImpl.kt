@@ -45,7 +45,7 @@ class ContentRepositoryImpl @Inject constructor(
         )
         val data = response.data
         if (!response.success || data == null) {
-            throw IOException(response.error ?: "Failed to load episodes")
+            throw IOException(response.error ?: "加载单集失败")
         }
         data.toDomain()
     }
@@ -60,7 +60,7 @@ class ContentRepositoryImpl @Inject constructor(
         val response = api.searchPodcasts(query)
         val data = response.data
         if (!response.success || data == null) {
-            throw IOException(response.error ?: "Search failed")
+            throw IOException(response.error ?: "搜索失败")
         }
         data.map { it.toDomain() }
     }
@@ -72,7 +72,7 @@ class ContentRepositoryImpl @Inject constructor(
         val response = api.channel(name)
         val data = response.data
         if (!response.success || data == null) {
-            throw IOException(response.error ?: "Failed to load channel")
+            throw IOException(response.error ?: "加载频道失败")
         }
         data.toDomain()
     }

@@ -74,7 +74,7 @@ class PlayerViewModel @Inject constructor(
                     return@launch
                 }
                 Result.NetworkError -> {
-                    _uiState.value = PlayerUiState.Error("Network connection failed")
+                    _uiState.value = PlayerUiState.Error("网络连接失败")
                     return@launch
                 }
             }
@@ -98,7 +98,7 @@ class PlayerViewModel @Inject constructor(
                     _uiState.value = PlayerUiState.Error(subtitlesResult.message)
                 }
                 Result.NetworkError -> {
-                    _uiState.value = PlayerUiState.Error("Network connection failed")
+                    _uiState.value = PlayerUiState.Error("网络连接失败")
                 }
             }
         }

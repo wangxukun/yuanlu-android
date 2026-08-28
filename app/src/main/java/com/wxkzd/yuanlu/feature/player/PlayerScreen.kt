@@ -51,17 +51,19 @@ private val PauseIcon: ImageVector = materialIcon(name = "Filled.Pause") {
 fun PlayerRoute(
     episodeid: String,
     onBack: () -> Unit,
+    onLogin: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     LaunchedEffect(episodeid) {
         viewModel.load(episodeid)
     }
-    PlayerScreen(onBack = onBack, viewModel = viewModel)
+    PlayerScreen(onBack = onBack, onLogin = onLogin, viewModel = viewModel)
 }
 
 @Composable
 fun PlayerScreen(
     onBack: () -> Unit,
+    onLogin: () -> Unit,
     viewModel: PlayerViewModel
 ) {
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
@@ -89,7 +91,7 @@ fun PlayerScreen(
             is PlayerUiState.Error -> ErrorBox(message = state.message, onRetry = viewModel::retry)
             is PlayerUiState.LoginRequired -> {
                 PlayerHeader(onBack = onBack, episode = state.episode)
-                LoginNotice()
+                LoginNotice(onLogin = onLogin)
                 SubtitleList(
                     subtitles = subtitles,
                     activeIndex = activeSubtitleIndex,
@@ -123,12 +125,9 @@ private fun PlayerHeader(onBack: () -> Unit, episode: Episode) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp), // Adjusted padding to compensate
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = episode.title,
@@ -150,7 +149,7 @@ private fun PlayerHeader(onBack: () -> Unit, episode: Episode) {
 }
 
 @Composable
-private fun LoginNotice() {
+private fun LoginNotice(onLogin: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier
@@ -158,12 +157,21 @@ private fun LoginNotice() {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Text(
-            text = "Sign in to listen to the full episode. Showing the first 3 minutes of transcript.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(12.dp)
-        )
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = "登录后可收听完整内容，当前仅展示前 3 分钟字幕。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "立即登录",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { onLogin() }
+            )
+        }
     }
 }
 
@@ -250,7 +258,7 @@ private fun SubtitleList(
     if (subtitles.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                text = "No transcript available",
+                text = "暂无字幕",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -84,7 +84,7 @@ fun PodcastDetailScreen(
     when {
         state.isLoading -> LoadingBox()
         state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::retry)
-        state.podcast == null -> EmptyBox("Podcast not found")
+        state.podcast == null -> EmptyBox("未找到该播客")
         else -> PodcastDetailContent(
             state = state,
             onBack = onBack,
@@ -138,10 +138,6 @@ private fun PodcastDetailContent(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
                     CoverImage(
                         url = podcast.coverUrl,
                         contentDescription = podcast.title,
@@ -158,7 +154,7 @@ private fun PodcastDetailContent(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         val meta = listOfNotNull(
-                            "${state.total} episodes",
+                            "${state.total} 集",
                             podcast.platform
                         ).joinToString(" · ")
                         Text(
@@ -169,7 +165,7 @@ private fun PodcastDetailContent(
                         podcast.platform?.let { platform ->
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "More in $platform",
+                                text = "${platform}的更多节目",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.clickable { onOpenChannel(platform) }
@@ -212,7 +208,7 @@ private fun PodcastDetailContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Episodes",
+                    text = "单集列表",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -221,7 +217,7 @@ private fun PodcastDetailContent(
                     selected = false,
                     onClick = onToggleSort,
                     label = {
-                        Text(if (state.sortAscending) "Oldest first" else "Newest first")
+                        Text(if (state.sortAscending) "最早优先" else "最新优先")
                     }
                 )
             }
@@ -229,7 +225,7 @@ private fun PodcastDetailContent(
 
         // ---- 剧集列表 ----
         if (state.episodes.isEmpty() && !state.isLoadingMore) {
-            item(key = "empty_episodes") { EmptyBox("No episodes yet") }
+            item(key = "empty_episodes") { EmptyBox("暂无单集") }
         }
         itemsIndexed(state.episodes, key = { _, episode -> episode.episodeid }) { index, episode ->
             EpisodeRow(episode = episode, onClick = { onOpenEpisode(episode.episodeid) })
@@ -250,7 +246,7 @@ private fun PodcastDetailContent(
                 when {
                     state.isLoadingMore -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     state.endReached && state.episodes.isNotEmpty() -> Text(
-                        text = "You've reached the end",
+                        text = "已经到底了",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -262,7 +258,7 @@ private fun PodcastDetailContent(
         if (state.channelPodcasts.isNotEmpty()) {
             item(key = "channel_header") {
                 SectionHeader(
-                    "More in ${podcast.platform ?: "this channel"}",
+                    "${podcast.platform ?: "该频道"}的更多节目",
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }

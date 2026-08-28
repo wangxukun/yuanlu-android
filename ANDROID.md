@@ -1,6 +1,6 @@
 # 远路播客 Android App 开发计划与上下文 (Context & Plan)
 
-> **当前状态**: Phase 2 (M3) 已完成（含发现页 UI 重设计与品牌主题同步），M4 待启动
+> **当前状态**: Phase 2 (M3+M3.5) 已完成（含游客模式/登录弹层/我的页），M4 待启动
 > **同步日期**: 2026-08-28
 > **说明**: 本文档汇总了项目的背景上下文、最新开发进度，以及完整的 Android 开发计划，方便在独立仓库中为 AI 助手提供全局 Context。
 
@@ -59,6 +59,25 @@
   - **ViewModel**：`DiscoverUiState` 新增 `trending`(totalPlays 降序 TOP10)/`editorPicks`/`newPodcasts`(createAt 降序前 8)/`channels`(`ChannelEntry(name, count)`) 区块字段，一次拉取客户端派生；补 `DiscoverViewModelTest` 4 例（区块派生/截断/空折叠/标签）。
   - **交互打磨（实测反馈修复）**：排名徽章金色压深 `#DAA520` + 银色调暗 + 全徽章 1dp 描边（白底封面辨识度）；搜索态系统返回键先清空回浏览态（`BackHandler`，不再直接退出应用），清空输入时即时退出搜索态不等防抖。
   - **实测环境备注**：本机模拟器（Medium_Phone, 1080x2400）+ `yuanlu` dev 服务（3000 端口，模拟器经 `10.0.2.2` 访问）联调验证；后端建有一个一次性测试账号 `android-preview@test.yuanlu.com` / `Yuanlu2026!`（不需要可删）。
+- [x] **Phase 2 - M3.6 游客模式 + 登录弹层 + 我的页** (✅ 完成 2026-08-28，模拟器端到端实测通过)
+  - **架构：全屏门禁 → 游客模式**（对齐 Web `routes.ts` 公开/受限路由）：未登录直接进主界面，发现/播客详情/频道公开可浏览；401 过期自动降级游客视图。底部 Tab 扩为 4 个（首页/发现/生词本/我的，对齐 Web MobileBottomNav）。
+  - **「立即登录」引导页** `LoginGateScreen`（对齐 Web `PodcastAuthPrompt`）：自绘麦克风+声波 ImageVector 插画、文案「跟上您的节目」、胶囊按钮按压 scale 动画；文案参数化供首页/生词本复用（生词本场景「构建你的生词本」）。
+  - **登录弹层** `LoginSheet`（ModalBottomSheet，对齐 Web `EmailCheckDialog`）：「欢迎来到远路播客/请选择登录方式」+ 双 Tab（手机号/邮箱）+ 验证码「获取验证码」按钮（`POST api/auth/sms/send` + 60s 倒计时；阿里云滑块风控降级提示改用邮箱登录）+ 协议勾选（未勾选禁用提交，已实测）+ 胶囊主按钮。登录成功由 tokenFlow 驱动自动收起，弹层全局挂载于 `AppViewModel`（对齐 Web 全局 ModalProvider）。
+  - **协议全文**：用户协议/隐私政策完整复用 Web 端文本（结构化 Kotlin `AgreementContent.kt`），登录层内链接点开全屏 `AgreementDialog`；后端协议更新时需同步该文件。
+  - **「我的」页重写**（对齐 Web `/auth/mine`）：用户卡（64dp 头像/昵称/角色 badge 管理员=远青·高级会员=曙光橙·普通用户=灰/email；未登录态引导卡）+「学习与记录」菜单组（弱项本/学习路径/历史/收藏，仅登录显示，点击 Snackbar「即将上线」）+「账户与系统设置」（个人中心/我的订阅/外观设置/消息通知/帮助与支持；控制台仅 ADMIN）+ 退出登录（token 清空自动回游客态）+ Shimmer 骨架。
+  - **主题三态**：跟随系统/浅色/深色（`settings_prefs` DataStore + `SettingsStore` + `MainActivity` 接线），深色即时生效已实测；新增依赖 `material-icons-extended`（菜单图标，release 由 R8 裁剪）。
+  - **数据层扩展**：`AuthApi` +`POST api/auth/sms/send`（业务失败也 200，`requireCaptcha` 标识风控）、+`GET api/user/profile`；`AuthRepository` +`sendSmsCode()`/`getProfile()`；`UserProfile` 领域模型。
+  - **🚨 后端缺口修复（yuanlu 仓库）**：`app/api/user/profile/route.ts` GET 原用裸 `auth()` 不认移动端 Bearer Token（实测 401），已改走 `requireAuth()`（Cookie 优先、Bearer 兜底）。**教训：后端移动端 Bearer 兼容仅覆盖接入 `core/auth/guard.ts` 的端点，新增会话态接口时必须核对此点**。
+  - **播放页游客引导**：`LoginRequired` 提示条中文化 +「立即登录」入口弹登录层；游客实测可看播客详情与前 3 分钟双语字幕。
+  - **验证**：单测 17/17（新增 LoginViewModelTest 5 例：手机号校验/倒计时/风控降级/空值拦截/reset；ProfileViewModelTest 4 例：资料加载/游客清空/登出/错误重试）；模拟器 E2E：游客四 Tab 分流 → 引导页 → 登录弹层（含协议门禁/全文查看）→ 邮箱登录成功自动收起 → 我的页资料 → 深色切换 → 登出回游客态 → 游客播放页引导。
+- [x] **Phase 2 - M3.7 全局中文化与 UI 细节对齐** (✅ 完成 2026-08-28)
+  - **全局文案中文化**：全面梳理了 `HomeScreen`、`DiscoverScreen`、`PodcastDetailScreen`、`ChannelScreen`、`PlayerScreen` 以及所有通用组件和 ViewModel/Repository 的错误提示，将所有硬编码的英文文本（如 "Editor's Picks"、"No episodes yet"、"Network connection failed" 等）统一翻译为简体中文，确保与 Web 端的本地化一致。
+  - **图标与插画对齐**：底部导航栏的“发现”图标从放大镜（`Icons.Filled.Search`）更改为指南针（`Icons.Filled.Explore`）；完全重写了 `LoginGateScreen` 中的 `PodcastSignal` 插画，废弃有填充渲染缺陷的 `materialIcon`，改用底层的 `ImageVector.Builder` 并显式声明 `SolidColor` 和 `PathFillType.EvenOdd`，完美 1:1 复刻 Web 端的播客信号 SVG。
+  - **布局与导航优化**：
+    - 去除所有二级页面（如播客详情、播放器、频道详情、协议弹窗）的顶部返回箭头按钮，统一使用系统手势或边缘返回。
+    - 重构了“发现”页面的布局，去除顶部的“发现”标题和搜索模块，将推荐频道、新播客等模块改为两列三行的网格布局。
+    - 在“发现”页面的推荐频道模块添加了“查看更多”功能，点击跳转至全新的“全部频道”页面。
+    - 对齐 Web 端的频道卡片设计：频道卡片统一正方形比例，文本水平居中溢出截断；移除了卡片中的“播放”图标，并完美复刻了 Web 端的“频道主页”（Computer 图标）按钮。
 - [ ] **Phase 2 - M4及以后**: 见下方详细开发计划。
 
 ---

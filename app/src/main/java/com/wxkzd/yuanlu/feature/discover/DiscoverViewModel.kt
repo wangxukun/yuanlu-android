@@ -98,7 +98,7 @@ class DiscoverViewModel @Inject constructor(
                     it.copy(isLoading = false, error = podcastsResult.message)
                 }
                 Result.NetworkError -> _uiState.update {
-                    it.copy(isLoading = false, error = "Network connection failed")
+                    it.copy(isLoading = false, error = "网络连接失败")
                 }
             }
         }

@@ -67,12 +67,9 @@ fun ChannelScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
             Column {
                 Text(
                     text = name,
@@ -81,7 +78,7 @@ fun ChannelScreen(
                 )
                 state.channel?.let {
                     Text(
-                        text = "${it.podcastCount} podcasts",
+                        text = "${it.podcastCount} 档播客",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -93,10 +90,10 @@ fun ChannelScreen(
         when {
             state.isLoading -> LoadingBox()
             state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::retry)
-            channel == null -> EmptyBox("Channel not found")
+            channel == null -> EmptyBox("未找到该频道")
             else -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
                 item(key = "shows_header") {
-                    SectionHeader("Top Shows", modifier = Modifier.padding(horizontal = 16.dp))
+                    SectionHeader("热门节目", modifier = Modifier.padding(horizontal = 16.dp))
                 }
                 channel.topShows.chunked(2).forEachIndexed { rowIndex, rowItems ->
                     item(key = "shows_$rowIndex") {
@@ -119,7 +116,7 @@ fun ChannelScreen(
                     }
                 }
                 item(key = "episodes_header") {
-                    SectionHeader("Top Episodes", modifier = Modifier.padding(horizontal = 16.dp))
+                    SectionHeader("热门单集", modifier = Modifier.padding(horizontal = 16.dp))
                 }
                 channel.topEpisodes.forEach { episode ->
                     item(key = "ep_${episode.episodeid}") {

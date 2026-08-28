@@ -83,3 +83,16 @@ data class SubtitleBundle(
     val subtitles: List<Subtitle>,
     val audioUrl: String?
 )
+
+/** 当前登录用户资料（GET api/user/profile） */
+data class UserProfile(
+    val userid: String,
+    val nickname: String? = null,
+    val avatarUrl: String? = null,
+    val bio: String? = null,
+    val learnLevel: String? = null,
+    val email: String? = null,
+    val phone: String? = null,
+    val role: String? = null,   // USER | PREMIUM | ADMIN
+    val createAt: String? = null
+)

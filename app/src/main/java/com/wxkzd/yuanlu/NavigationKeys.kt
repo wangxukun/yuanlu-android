@@ -11,3 +11,5 @@ import kotlinx.serialization.Serializable
 @Serializable data class ChannelNav(val name: String) : NavKey
 
 @Serializable data class PlayerNav(val episodeid: String) : NavKey
+
+@Serializable data object ChannelListNav : NavKey
