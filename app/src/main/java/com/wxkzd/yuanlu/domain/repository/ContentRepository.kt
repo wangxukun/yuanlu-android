@@ -2,6 +2,7 @@ package com.wxkzd.yuanlu.domain.repository
 
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.ChannelData
+import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
 import com.wxkzd.yuanlu.domain.model.Podcast
@@ -42,4 +43,16 @@ interface ContentRepository {
 
     /** 频道（平台）聚合页数据 */
     suspend fun getChannel(name: String): Result<ChannelData>
+
+    /** 某剧集下的评论（根评论倒序平铺，回复已挂到 replies） */
+    suspend fun getComments(episodeid: String): Result<List<Comment>>
+
+    /** 发布评论（parentId 非空为回复）；返回可直接入列的完整评论 */
+    suspend fun createComment(episodeid: String, content: String, parentId: Int?): Result<Comment>
+
+    /** 切换评论点赞，返回切换后的 liked 状态 */
+    suspend fun toggleCommentLike(commentid: Int): Result<Boolean>
+
+    /** 有道文本翻译（需登录，有每日配额） */
+    suspend fun translate(text: String): Result<String>
 }

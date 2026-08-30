@@ -1,6 +1,7 @@
 package com.wxkzd.yuanlu.core.auth
 
 import android.content.Context
+import android.util.Base64
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -10,6 +11,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,6 +27,11 @@ class TokenStore @Inject constructor(
 
     val tokenFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[TOKEN_KEY]
+    }
+
+    /** 从 JWT payload 解出的当前用户角色（USER | PREMIUM | ADMIN），未登录/解析失败为 null */
+    val roleFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        decodeJwtRole(preferences[TOKEN_KEY])
     }
 
     suspend fun saveToken(token: String) {
@@ -39,5 +48,17 @@ class TokenStore @Inject constructor(
 
     suspend fun getToken(): String? {
         return context.dataStore.data.first()[TOKEN_KEY]
+    }
+
+    /** 解码 JWT payload（base64url 无填充）中的 role 声明 */
+    private fun decodeJwtRole(token: String?): String? {
+        if (token.isNullOrBlank()) return null
+        return try {
+            val payload = token.split(".").getOrNull(1) ?: return null
+            val json = String(Base64.decode(payload, Base64.URL_SAFE), Charsets.UTF_8)
+            Json.parseToJsonElement(json).jsonObject["role"]?.jsonPrimitive?.content
+        } catch (e: Exception) {
+            null
+        }
     }
 }

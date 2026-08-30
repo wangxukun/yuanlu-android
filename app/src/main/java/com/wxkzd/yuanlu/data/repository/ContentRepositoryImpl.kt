@@ -2,8 +2,13 @@ package com.wxkzd.yuanlu.data.repository
 
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.ContentApi
+import com.wxkzd.yuanlu.data.remote.dto.CommentDto
+import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.TranslateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.toBundle
 import com.wxkzd.yuanlu.domain.model.ChannelData
+import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
 import com.wxkzd.yuanlu.domain.model.Podcast
@@ -13,6 +18,7 @@ import com.wxkzd.yuanlu.domain.model.Tag
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -77,12 +83,71 @@ class ContentRepositoryImpl @Inject constructor(
         data.toDomain()
     }
 
+    override suspend fun getComments(episodeid: String): Result<List<Comment>> = call {
+        api.commentList(episodeid).map { it.toDomain() }.buildCommentTree()
+    }
+
+    override suspend fun createComment(
+        episodeid: String,
+        content: String,
+        parentId: Int?
+    ): Result<Comment> = call {
+        api.createComment(CreateCommentRequestDto(episodeid, content, parentId)).toDomain()
+    }
+
+    override suspend fun toggleCommentLike(commentid: Int): Result<Boolean> = call {
+        api.likeComment(LikeCommentRequestDto(commentid)).liked
+    }
+
+    override suspend fun translate(text: String): Result<String> = call {
+        val response = api.translate(TranslateRequestDto(text))
+        response.definition?.takeIf { it.isNotBlank() }
+            ?: throw IOException("翻译失败，请稍后重试")
+    }
+
+    /** 平铺评论 → 根评论（倒序）+ replies 挂载，对齐 Web 端 buildCommentTree */
+    private fun List<Comment>.buildCommentTree(): List<Comment> {
+        val byId = mutableMapOf<Int, Comment>()
+        val roots = mutableListOf<Comment>()
+        // commentid 自增，正序遍历保证父评论先入树
+        sortedBy { it.commentid }.forEach { comment ->
+            val parent = comment.parentId?.let { byId[it] }
+            if (parent != null) {
+                byId[parent.commentid] = parent.copy(replies = parent.replies + comment)
+            } else {
+                roots += comment
+            }
+        }
+        // 根评论保持接口的时间倒序（最新在前）
+        return roots.sortedByDescending { it.commentid }
+    }
+
+    private fun CommentDto.toDomain() = Comment(
+        commentid = commentid,
+        userid = userid,
+        text = commentText,
+        commentAt = commentAt,
+        parentId = parentId,
+        nickname = User?.profile?.nickname ?: User?.email?.substringBefore("@"),
+        avatarUrl = User?.profile?.avatarUrl,
+        learnLevel = User?.profile?.learnLevel,
+        likesCount = likesCount,
+        isLiked = isLiked
+    )
+
     private suspend fun <T> call(block: suspend () -> T): Result<T> =
         withContext(Dispatchers.IO) {
             try {
                 Result.Success(block())
             } catch (e: IOException) {
                 Result.NetworkError
+            } catch (e: HttpException) {
+                val message = when (e.code()) {
+                    401 -> "请先登录"
+                    403 -> "今日免费翻译次数已用完，升级会员解锁无限查询"
+                    else -> "请求失败（${e.code()}）"
+                }
+                Result.Error(e.code(), message)
             } catch (e: Exception) {
                 Result.Error(600, e.message ?: "Unexpected error")
             }

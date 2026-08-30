@@ -2,6 +2,7 @@ package com.wxkzd.yuanlu.feature.discover
 
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.ChannelData
+import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
 import com.wxkzd.yuanlu.domain.model.Podcast
@@ -155,4 +156,16 @@ private class FakeContentRepository(
 
     override suspend fun getChannel(name: String): Result<ChannelData> =
         Result.Success(ChannelData(name, 0, emptyList(), emptyList()))
+
+    override suspend fun getComments(episodeid: String): Result<List<Comment>> =
+        Result.Success(emptyList())
+
+    override suspend fun createComment(episodeid: String, content: String, parentId: Int?): Result<Comment> =
+        Result.Error(0, "not implemented in fake")
+
+    override suspend fun toggleCommentLike(commentid: Int): Result<Boolean> =
+        Result.Success(false)
+
+    override suspend fun translate(text: String): Result<String> =
+        Result.Error(0, "not implemented in fake")
 }

@@ -429,7 +429,7 @@ fun ChannelCard(
     }
 }
 
-/** 发现页骨架屏：两行卡片占位 + 扫光 */
+/** 发现页骨架屏：三行卡片占位 + 扫光 */
 @Composable
 private fun DiscoverSkeleton() {
     Column(
@@ -438,14 +438,8 @@ private fun DiscoverSkeleton() {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Spacer(modifier = Modifier.height(4.dp))
-        ShimmerBox(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            cornerRadius = 28.dp
-        )
-        repeat(2) { row ->
+        Spacer(modifier = Modifier.height(12.dp))
+        repeat(3) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 repeat(2) {
                     Column(

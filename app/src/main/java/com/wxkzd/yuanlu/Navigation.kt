@@ -108,7 +108,9 @@ private fun AppNavHost(
                 PlayerRoute(
                     episodeid = key.episodeid,
                     onBack = { back() },
-                    onLogin = onLogin
+                    onLogin = onLogin,
+                    onOpenPodcast = { open(PodcastDetailNav(it)) },
+                    onOpenEpisode = { open(PlayerNav(it)) }
                 )
             }
             entry<ChannelListNav> {

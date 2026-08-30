@@ -2,13 +2,21 @@ package com.wxkzd.yuanlu.data.remote
 
 import com.wxkzd.yuanlu.core.network.ApiResponse
 import com.wxkzd.yuanlu.data.remote.dto.ChannelDataDto
+import com.wxkzd.yuanlu.data.remote.dto.CommentDto
+import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.EpisodeDto
 import com.wxkzd.yuanlu.data.remote.dto.EpisodePageDto
+import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.LikeCommentResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.PodcastDetailDto
 import com.wxkzd.yuanlu.data.remote.dto.PodcastDto
 import com.wxkzd.yuanlu.data.remote.dto.SubtitlesResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.TagDto
+import com.wxkzd.yuanlu.data.remote.dto.TranslateRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.YoudaoResponseDto
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -64,4 +72,20 @@ interface ContentApi {
     /** 信封：data = { platformName, podcastCount, topShows, topEpisodes } */
     @GET("api/channel/{name}")
     suspend fun channel(@Path(value = "name", encoded = true) name: String): ApiResponse<ChannelDataDto>
+
+    /** 裸数组：按剧集倒序的评论（含用户信息/点赞数/当前用户点赞态） */
+    @GET("api/comment/list")
+    suspend fun commentList(@Query("episodeid") episodeid: String): List<CommentDto>
+
+    /** 裸对象：创建评论（或回复，parentId 非空），需登录 */
+    @POST("api/comment/create")
+    suspend fun createComment(@Body body: CreateCommentRequestDto): CommentDto
+
+    /** { liked }：切换点赞，需登录 */
+    @POST("api/comment/like")
+    suspend fun likeComment(@Body body: LikeCommentRequestDto): LikeCommentResponseDto
+
+    /** 裸对象：有道文本翻译（definition 为译文），需登录且有每日配额 */
+    @POST("api/dictionary/youdao")
+    suspend fun translate(@Body body: TranslateRequestDto): YoudaoResponseDto
 }

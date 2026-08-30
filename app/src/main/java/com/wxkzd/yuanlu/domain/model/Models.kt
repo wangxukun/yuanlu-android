@@ -84,6 +84,21 @@ data class SubtitleBundle(
     val audioUrl: String?
 )
 
+/** 剧集评论（树形：根评论带 replies，字段对齐 /api/comment/list） */
+data class Comment(
+    val commentid: Int,
+    val userid: String,
+    val text: String,
+    val commentAt: String?,
+    val parentId: Int? = null,
+    val nickname: String?,
+    val avatarUrl: String?,
+    val learnLevel: String?,
+    val likesCount: Int,
+    val isLiked: Boolean,
+    val replies: List<Comment> = emptyList()
+)
+
 /** 当前登录用户资料（GET api/user/profile） */
 data class UserProfile(
     val userid: String,
