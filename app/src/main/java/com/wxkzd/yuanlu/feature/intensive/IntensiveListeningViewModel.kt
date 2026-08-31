@@ -117,11 +117,14 @@ class IntensiveListeningViewModel @Inject constructor(
                     ?: if (ui.transcriptMode == TranscriptMode.DICTATE && activeIdx >= 0) activeIdx else null
                 Triple(p.isPlaying, p.currentPosition, target?.let { ui.subtitles.getOrNull(it) })
             }.distinctUntilChanged().collect { (isPlaying, positionMs, loopSub) ->
-                if (isPlaying && loopSub != null &&
+                // end <= start 的脏字幕会触发每次 tick 都回跳的 seek 风暴（听感"快进"），跳过
+                if (isPlaying && loopSub != null && loopSub.end > loopSub.start &&
                     positionMs >= loopSub.end * 1000 &&
                     SystemClock.elapsedRealtime() - lastJumpAtMs > 500
                 ) {
                     playerController.seekTo((loopSub.start * 1000).toLong())
+                    // 自动回跳也计入节流窗口，避免 seek 与 200ms 进度 tick 互相追逐
+                    lastJumpAtMs = SystemClock.elapsedRealtime()
                 }
             }
         }

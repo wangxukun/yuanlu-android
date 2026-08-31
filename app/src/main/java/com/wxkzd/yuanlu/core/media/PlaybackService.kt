@@ -24,7 +24,9 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         mediaSession?.run {
-            player.release()
+            // 注意：不能 release 共享的 ExoPlayer——它是 Hilt 单例，由 App 进程持有；
+            // Service 销毁重建（任务划掉/系统回收）后若已释放，后续播放会崩溃或行为异常。
+            // 仅释放 session 自身；播放器交由 PlayerController/App 生命周期管理。
             release()
             mediaSession = null
         }
