@@ -1,7 +1,7 @@
 # 远路播客 Android App 开发计划与上下文 (Context & Plan)
 
-> **当前状态**: Phase 2 播放流程与精听联动闭环已完成（迷你播放条/全屏播放器/精听页），M4 待启动
-> **同步日期**: 2026-08-28
+> **当前状态**: Phase 2 播放流程与精听联动闭环已完成（迷你播放条/全屏播放器/精听页 + 查词/听写），M4 待启动
+> **同步日期**: 2026-08-31
 > **说明**: 本文档汇总了项目的背景上下文、最新开发进度，以及完整的 Android 开发计划，方便在独立仓库中为 AI 助手提供全局 Context。
 
 ---
@@ -108,6 +108,10 @@
   - **数据层**：`DictEntry/DictDefinition/DictEtymology` 领域模型 + DTO（snake_case @SerialName）+ `ContentApi`（dict/{word}、vocabulary/add、vocabulary/words）+ Repository 三方法（含 401/403/429/400 文案映射）。
   - **🚨 后端 Bearer 兼容（yuanlu 仓库，M3.6 同款教训）**：`guard.ts` 新增 `authWithMobile()`（cookie 优先、Bearer 兜底、允许匿名）；`api/dict/[word]` 两处 `auth()` → `authWithMobile()`（匿名缓存查询不受影响、登录用户配额正确归属）；`api/vocabulary/words` 与 `api/vocabulary/add` 改走 `requireAuth()`。
   - **验证**：`compileDebugKotlin`/`assembleDebug`/`testDebugUnitTest` 23/23（新增 `DictationUtilsTest` 6 例：清洗/分词/切块/标点占位/截断/整句判定）。
+- [x] **Phase 2 - M4 前置 VI: 查词弹窗全屏化 + 词源记忆排版修复** (✅ 完成 2026-08-31，编译 + 23 单测通过)
+  - **查词弹窗全屏**：`VocabularySheet` 的 `ModalBottomSheet` 改为 `fillMaxSize` + `rememberModalBottomSheetState(skipPartiallyExpanded = true)` + `RectangleShape`，点词弹层直接铺满整屏（不再半屏停靠）；内容列 `fillMaxSize` 并以 `weight(1f)` 弹性留白，底栏「来源：剧集 + 完成学习 →」固定屏幕底端；顶部拖把保留，可下滑关闭。
+  - **词源记忆卡排版修复（模拟器实测反馈，2 项）**：①收起态标题「🧬 词源记忆」取消 `weight(1f)`，预览文本（词根/前缀/后缀）改为单行 + `TextOverflow.Ellipsis` 占满剩余宽度——修复长预览把标题挤成竖排单字；②展开态前缀/词根/后缀 chips 由不换行 `Row` 改为 `FlowRow`（横/纵 8dp 间距，放不下自动换行）——修复长 chip 被挤成细长竖条、拆解文字排版错乱。
+  - **验证**：`compileDebugKotlin` / `testDebugUnitTest` 23/23 通过（纯 UI 布局改动，未新增测试）。
 - [ ] **Phase 2 - M4及以后**: 见下方详细开发计划。
 
 ---
