@@ -2,6 +2,7 @@ package com.wxkzd.yuanlu.domain.repository
 
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.ChannelData
+import com.wxkzd.yuanlu.domain.model.DictEntry
 import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
@@ -55,4 +56,23 @@ interface ContentRepository {
 
     /** 有道文本翻译（需登录，有每日配额） */
     suspend fun translate(text: String): Result<String>
+
+    // ---------- 词典与生词（精听查词） ----------
+
+    /** 查词典（GET api/dict/{word}）；配额用尽/未登录等以 Result.Error 返回 */
+    suspend fun lookupWord(word: String): Result<DictEntry>
+
+    /** 保存生词（POST api/vocabulary/add）；400=已在生词本、403=免费配额 */
+    suspend fun addVocabulary(
+        word: String,
+        definition: String,
+        contextSentence: String,
+        translation: String,
+        episodeid: String,
+        timestampSec: Int,
+        speakUrl: String
+    ): Result<Unit>
+
+    /** 已保存单词集合（小写；未登录返回空集语义由调用方处理） */
+    suspend fun getVocabularyWords(): Result<Set<String>>
 }

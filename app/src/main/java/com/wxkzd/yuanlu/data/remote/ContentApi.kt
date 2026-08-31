@@ -4,6 +4,7 @@ import com.wxkzd.yuanlu.core.network.ApiResponse
 import com.wxkzd.yuanlu.data.remote.dto.ChannelDataDto
 import com.wxkzd.yuanlu.data.remote.dto.CommentDto
 import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.DictResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.EpisodeDto
 import com.wxkzd.yuanlu.data.remote.dto.EpisodePageDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
@@ -13,6 +14,9 @@ import com.wxkzd.yuanlu.data.remote.dto.PodcastDto
 import com.wxkzd.yuanlu.data.remote.dto.SubtitlesResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.TagDto
 import com.wxkzd.yuanlu.data.remote.dto.TranslateRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyWordsResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.YoudaoResponseDto
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -88,4 +92,18 @@ interface ContentApi {
     /** 裸对象：有道文本翻译（definition 为译文），需登录且有每日配额 */
     @POST("api/dictionary/youdao")
     suspend fun translate(@Body body: TranslateRequestDto): YoudaoResponseDto
+
+    // ---------- 词典与生词（精听查词） ----------
+
+    /** 信封：data = DictEntryDTO（缓存命中匿名可查；LLM 生成计入登录用户配额） */
+    @GET("api/dict/{word}")
+    suspend fun lookupWord(@Path(value = "word", encoded = true) word: String): DictResponseDto
+
+    /** { success }；400=已在生词本、403=免费配额、401=未登录 */
+    @POST("api/vocabulary/add")
+    suspend fun addVocabulary(@Body body: VocabularyAddRequestDto): VocabularyAddResponseDto
+
+    /** 信封：data = 已保存单词小写列表（用于查询弹层已保存态） */
+    @GET("api/vocabulary/words")
+    suspend fun vocabularyWords(): VocabularyWordsResponseDto
 }

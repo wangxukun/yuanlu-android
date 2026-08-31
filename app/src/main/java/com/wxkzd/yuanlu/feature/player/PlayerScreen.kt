@@ -32,13 +32,12 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.materialIcon
-import androidx.compose.material.icons.materialPath
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -90,38 +89,41 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-// ---------- 远路 Web 端色板（globals.css），剧集详情页复刻专用 ----------
+// ---------- 远路 Web 端色板（globals.css）已抽至 PlayerPalette.kt，播放器相关页面共用 ----------
 
-private val Primary600 = Color(0xFF1F7A5C)
-private val Primary700 = Color(0xFF1A6349)
-private val Accent500 = Color(0xFFD98A17)
-private val Accent100 = Color(0xFFFAE5C6)
-private val Accent300 = Color(0xFFECB35E)
-private val Accent700 = Color(0xFF96580D)
-private val Ink50 = Color(0xFFFAF8F3)
-private val Ink100 = Color(0xFFF1EDE4)
-private val Ink200 = Color(0xFFE3DDCF)
-private val Ink400 = Color(0xFFA79E8A)
-private val Ink500 = Color(0xFF857C68)
-private val Ink600 = Color(0xFF655D4C)
-private val Ink700 = Color(0xFF4A4436)
-private val Ink900 = Color(0xFF221F18)
+// ---------- 深浅色适配：详情页中性色按外观设置取值（修复深色模式仍为浅色底/浅色字的问题） ----------
+// 浅色沿用 Web 暖纸 ink 阶梯；深色取反阶梯（背景 ink-950、分隔 ink-800、文字 ink-50/300/400）。
 
-/** Pause 不在 material-icons-core 核心集内，这里用标准 24dp 网格自绘（materialPath 默认黑色填充，否则画不出内容） */
-private val PauseIcon: ImageVector = materialIcon(name = "Filled.Pause") {
-    materialPath {
-        moveTo(6.0f, 5.0f)
-        horizontalLineToRelative(4.0f)
-        verticalLineToRelative(14.0f)
-        horizontalLineToRelative(-4.0f)
-        close()
-        moveTo(14.0f, 5.0f)
-        horizontalLineToRelative(4.0f)
-        verticalLineToRelative(14.0f)
-        horizontalLineToRelative(-4.0f)
-        close()
-    }
-}
+@Composable
+private fun pageBg(): Color = if (isDarkAppearance()) Ink950 else Ink50
+
+@Composable
+private fun dividerColor(): Color = if (isDarkAppearance()) Ink800 else Ink100
+
+@Composable
+private fun softLine(): Color = if (isDarkAppearance()) Ink700 else Ink200
+
+@Composable
+private fun hintColor(): Color = if (isDarkAppearance()) Ink500 else Ink400
+
+@Composable
+private fun subTextColor(): Color = if (isDarkAppearance()) Ink400 else Ink500
+
+@Composable
+private fun bodyTextColor(): Color = if (isDarkAppearance()) Ink300 else Ink600
+
+@Composable
+private fun strongTextColor(): Color = if (isDarkAppearance()) Ink300 else Ink700
+
+@Composable
+private fun titleTextColor(): Color = if (isDarkAppearance()) Ink50 else Ink900
+
+@Composable
+private fun brandPrimary(): Color = if (isDarkAppearance()) Primary400 else Primary600
+
+@Composable
+private fun transcriptSheetBg(): Color = if (isDarkAppearance()) Ink900 else Color.White
+
 
 @Composable
 fun PlayerRoute(
@@ -170,7 +172,7 @@ fun PlayerScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Ink50)
+            .background(pageBg())
             .statusBarsPadding()
     ) {
         when {
@@ -206,7 +208,7 @@ fun PlayerScreen(
     if (uiState.isTranscriptOpen && uiState.episode != null) {
         ModalBottomSheet(
             onDismissRequest = { viewModel.setTranscriptOpen(false) },
-            containerColor = Color.White
+            containerColor = transcriptSheetBg()
         ) {
             TranscriptSheet(
                 subtitles = subtitles,
@@ -275,13 +277,13 @@ private fun EpisodeDetailContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = Ink700)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = strongTextColor())
                 }
                 Text(
                     text = "剧集详情",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Ink900,
+                    color = titleTextColor(),
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(48.dp))
@@ -296,7 +298,7 @@ private fun EpisodeDetailContent(
                     .padding(horizontal = 16.dp)
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, Ink100, RoundedCornerShape(16.dp))
+                    .border(1.dp, dividerColor(), RoundedCornerShape(16.dp))
                     .clickable { handlePlayTap(listen = false) }
             ) {
                 CoverImage(
@@ -354,13 +356,13 @@ private fun EpisodeDetailContent(
                         .align(Alignment.BottomEnd)
                         .padding(12.dp)
                         .size(56.dp)
-                        .background(Primary600, CircleShape)
+                        .background(brandPrimary(), CircleShape)
                         .clickable { handlePlayTap(listen = false) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = when {
-                            isPlayingThis -> PauseIcon
+                            isPlayingThis -> Icons.Filled.Pause
                             isLocked -> Icons.Filled.Lock
                             else -> Icons.Filled.PlayArrow
                         },
@@ -386,28 +388,28 @@ private fun EpisodeDetailContent(
                         text = tag.name.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Primary600,
+                        color = brandPrimary(),
                         modifier = Modifier
-                            .background(Primary600.copy(alpha = 0.05f), RoundedCornerShape(50))
+                            .background(brandPrimary().copy(alpha = 0.05f), RoundedCornerShape(50))
                             .padding(horizontal = 12.dp, vertical = 4.dp)
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.DateRange, contentDescription = null, tint = Ink500, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.DateRange, contentDescription = null, tint = subTextColor(), modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = episode.publishAt?.let { formatChineseDate(it) } ?: "未知日期",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Ink500
+                        color = subTextColor()
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(ScheduleIcon, contentDescription = null, tint = Ink500, modifier = Modifier.size(16.dp))
+                    Icon(ScheduleIcon, contentDescription = null, tint = subTextColor(), modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "${episode.duration / 60}分钟",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Ink500
+                        color = subTextColor()
                     )
                 }
             }
@@ -426,14 +428,14 @@ private fun EpisodeDetailContent(
                         text = episode.title,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Ink900
+                        color = titleTextColor()
                     )
                     state.translatedTitle?.let { translated ->
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = translated,
                             style = MaterialTheme.typography.titleSmall,
-                            color = Ink600
+                            color = bodyTextColor()
                         )
                     }
                 }
@@ -458,13 +460,13 @@ private fun EpisodeDetailContent(
                         .clickable { onOpenPodcast(podcastid) }
                         .padding(horizontal = 4.dp, vertical = 4.dp)
                 ) {
-                    Icon(TvIcon, contentDescription = null, tint = Primary600, modifier = Modifier.size(20.dp))
+                    Icon(TvIcon, contentDescription = null, tint = brandPrimary(), modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = episode.podcastTitle ?: "远路英语",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Primary600
+                        color = brandPrimary()
                     )
                 }
             }
@@ -536,7 +538,7 @@ private fun EpisodeDetailContent(
                 text = "互动讨论",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Ink900,
+                color = titleTextColor(),
                 modifier = Modifier.padding(start = 16.dp, top = 32.dp, bottom = 8.dp)
             )
         }
@@ -566,7 +568,7 @@ private fun EpisodeDetailContent(
                     text = "相关剧集",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Ink900,
+                    color = titleTextColor(),
                     modifier = Modifier.padding(start = 16.dp, top = 32.dp, bottom = 8.dp)
                 )
             }
@@ -588,8 +590,8 @@ private fun EpisodeDetailContent(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Primary600.copy(alpha = 0.05f))
-                        .border(1.dp, Primary600.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        .background(brandPrimary().copy(alpha = 0.05f))
+                        .border(1.dp, brandPrimary().copy(alpha = 0.1f), RoundedCornerShape(12.dp))
                         .clickable { podcastid?.let(onOpenPodcast) }
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
@@ -598,7 +600,7 @@ private fun EpisodeDetailContent(
                         text = "查看更多内容",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Primary600,
+                        color = brandPrimary(),
                         letterSpacing = 2.sp
                     )
                 }
@@ -613,14 +615,14 @@ private fun TranslateButton(busy: Boolean, active: Boolean, onClick: () -> Unit)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (active) Primary600.copy(alpha = 0.1f) else Color.Transparent)
+            .background(if (active) brandPrimary().copy(alpha = 0.1f) else Color.Transparent)
             .clickable { onClick() }
             .padding(8.dp)
     ) {
         if (busy) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Primary600)
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = brandPrimary())
         } else {
-            Icon(LanguagesIcon, contentDescription = "翻译", tint = if (active) Primary600 else Ink400, modifier = Modifier.size(20.dp))
+            Icon(LanguagesIcon, contentDescription = "翻译", tint = if (active) brandPrimary() else hintColor(), modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -664,7 +666,7 @@ private fun ActionSection(
     onShare: () -> Unit
 ) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
-        HorizontalDivider(color = Ink100)
+        HorizontalDivider(color = dividerColor())
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -673,12 +675,12 @@ private fun ActionSection(
         ) {
             PrimaryCtaButton(
                 icon = when {
-                    isPlayingThis -> PauseIcon
+                    isPlayingThis -> Icons.Filled.Pause
                     isLocked -> Icons.Filled.Lock
                     else -> Icons.Filled.PlayArrow
                 },
                 label = if (isPlayingThis) "暂停" else "开始精听",
-                container = Primary600,
+                container = brandPrimary(),
                 onClick = onListening,
                 modifier = Modifier.weight(1f)
             )
@@ -703,12 +705,12 @@ private fun ActionSection(
                 icon = if (isFavorited) BookmarkIcon else BookmarkBorderIcon,
                 label = "收藏",
                 onClick = onFavorite,
-                tint = if (isFavorited) Primary600 else Ink500,
+                tint = if (isFavorited) brandPrimary() else subTextColor(),
                 modifier = Modifier.weight(1f)
             )
             IconActionBox(icon = Icons.Filled.Share, label = "分享", onClick = onShare, modifier = Modifier.weight(1f))
         }
-        HorizontalDivider(color = Ink100)
+        HorizontalDivider(color = dividerColor())
     }
 }
 
@@ -746,12 +748,12 @@ private fun IconActionBox(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = Ink500
+    tint: Color = subTextColor()
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, Ink100, RoundedCornerShape(12.dp))
+            .border(1.dp, dividerColor(), RoundedCornerShape(12.dp))
             .clickable { onClick() }
             .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -781,19 +783,19 @@ private fun ShowNotesSection(
                 text = "节目介绍",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Ink900,
+                color = titleTextColor(),
                 modifier = Modifier.weight(1f)
             )
             TranslateButton(busy = isTranslating, active = translated != null, onClick = onTranslate)
         }
         HorizontalDivider(
-            color = Ink200,
+            color = softLine(),
             modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
         )
         Text(
             text = display,
             style = MaterialTheme.typography.bodyLarge,
-            color = Ink600,
+            color = bodyTextColor(),
             lineHeight = 28.sp,
             maxLines = if (expanded) Int.MAX_VALUE else 3,
             overflow = TextOverflow.Ellipsis,
@@ -806,8 +808,8 @@ private fun ShowNotesSection(
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(Ink50)
-                        .border(1.dp, Ink100, RoundedCornerShape(50))
+                        .background(pageBg())
+                        .border(1.dp, dividerColor(), RoundedCornerShape(50))
                         .clickable { expanded = true }
                         .padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
@@ -815,9 +817,9 @@ private fun ShowNotesSection(
                         text = "显示全部",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Primary600
+                        color = brandPrimary()
                     )
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Primary600, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = brandPrimary(), modifier = Modifier.size(16.dp))
                 }
             }
         } else if (expanded) {
@@ -832,9 +834,9 @@ private fun ShowNotesSection(
                     text = "收起内容",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Primary600
+                    color = brandPrimary()
                 )
-                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = Primary600, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = brandPrimary(), modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -847,7 +849,7 @@ private fun LoginPromptBox(onLogin: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .border(1.dp, Ink200, RoundedCornerShape(16.dp))
+            .border(1.dp, softLine(), RoundedCornerShape(16.dp))
             .padding(vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -855,20 +857,20 @@ private fun LoginPromptBox(onLogin: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(Ink100, CircleShape),
+                .background(dividerColor(), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.Person, contentDescription = null, tint = Ink400, modifier = Modifier.size(24.dp))
+            Icon(Icons.Filled.Person, contentDescription = null, tint = hintColor(), modifier = Modifier.size(24.dp))
         }
         Text(
             text = "登录后参与讨论，记录你的学习点滴",
             style = MaterialTheme.typography.bodyMedium,
-            color = Ink500
+            color = subTextColor()
         )
         Button(
             onClick = onLogin,
             shape = RoundedCornerShape(50),
-            colors = ButtonDefaults.buttonColors(containerColor = Primary600)
+            colors = ButtonDefaults.buttonColors(containerColor = brandPrimary())
         ) {
             Text(text = "立即登录", fontWeight = FontWeight.Bold)
         }
@@ -892,14 +894,14 @@ private fun CommentForm(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(Primary600.copy(alpha = 0.1f), CircleShape),
+                .background(brandPrimary().copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "我",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = Primary600
+                color = brandPrimary()
             )
         }
         Column(modifier = Modifier.weight(1f)) {
@@ -924,7 +926,7 @@ private fun CommentForm(
                     Text(
                         text = "${content.length}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Ink400
+                        color = hintColor()
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                 }
@@ -935,7 +937,7 @@ private fun CommentForm(
                     },
                     enabled = content.isNotBlank() && !isSubmitting,
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary600)
+                    colors = ButtonDefaults.buttonColors(containerColor = brandPrimary())
                 ) {
                     if (isSubmitting) {
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
@@ -964,7 +966,7 @@ private fun CommentsList(
                 .padding(vertical = 40.dp),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = Primary600.copy(alpha = 0.4f))
+            CircularProgressIndicator(color = brandPrimary().copy(alpha = 0.4f))
         }
         comments.isEmpty() -> Box(
             modifier = Modifier
@@ -975,7 +977,7 @@ private fun CommentsList(
             Text(
                 text = "还没有人发言，来抢沙发吧！",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Ink400
+                color = hintColor()
             )
         }
         else -> Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -986,7 +988,7 @@ private fun CommentsList(
                     onReply = onReply
                 )
                 if (index < comments.lastIndex) {
-                    HorizontalDivider(color = Ink100.copy(alpha = 0.6f))
+                    HorizontalDivider(color = dividerColor().copy(alpha = 0.6f))
                 }
             }
         }
@@ -1015,7 +1017,7 @@ private fun CommentItem(
                         text = comment.nickname ?: "远路学友",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Ink700,
+                        color = strongTextColor(),
                         modifier = Modifier.weight(1f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1023,7 +1025,7 @@ private fun CommentItem(
                     Text(
                         text = comment.commentAt?.let { formatCommentDate(it) } ?: "",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Ink400
+                        color = hintColor()
                     )
                 }
                 Spacer(modifier = Modifier.height(6.dp))
@@ -1031,9 +1033,9 @@ private fun CommentItem(
                 Text(
                     text = comment.text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Ink700,
+                    color = strongTextColor(),
                     modifier = Modifier
-                        .background(Ink100.copy(alpha = 0.55f), RoundedCornerShape(topStart = 2.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
+                        .background(dividerColor().copy(alpha = 0.55f), RoundedCornerShape(topStart = 2.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
                         .padding(12.dp)
                 )
                 Spacer(modifier = Modifier.height(6.dp))
@@ -1041,7 +1043,7 @@ private fun CommentItem(
                     Icon(
                         imageVector = Icons.Filled.ThumbUp,
                         contentDescription = "点赞",
-                        tint = if (comment.isLiked) Primary600 else Ink400,
+                        tint = if (comment.isLiked) brandPrimary() else hintColor(),
                         modifier = Modifier
                             .size(18.dp)
                             .clickable { onToggleLike(comment.commentid) }
@@ -1051,14 +1053,14 @@ private fun CommentItem(
                         Text(
                             text = "${comment.likesCount}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (comment.isLiked) Primary600 else Ink400
+                            color = if (comment.isLiked) brandPrimary() else hintColor()
                         )
                     }
                     Spacer(modifier = Modifier.width(20.dp))
                     Text(
                         text = "回复",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Ink400,
+                        color = hintColor(),
                         modifier = Modifier.clickable { replying = !replying }
                     )
                 }
@@ -1088,7 +1090,7 @@ private fun CommentItem(
                             },
                             enabled = replyContent.isNotBlank()
                         ) {
-                            Icon(Icons.Filled.Send, contentDescription = "发送回复", tint = Primary600)
+                            Icon(Icons.Filled.Send, contentDescription = "发送回复", tint = brandPrimary())
                         }
                     }
                 }
@@ -1104,7 +1106,7 @@ private fun CommentItem(
                                     text = reply.nickname ?: "远路学友",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Ink700,
+                                    color = strongTextColor(),
                                     modifier = Modifier.weight(1f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -1112,23 +1114,23 @@ private fun CommentItem(
                                 Text(
                                     text = reply.commentAt?.let { formatCommentDate(it) } ?: "",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Ink400
+                                    color = hintColor()
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = reply.text,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Ink700,
+                                color = strongTextColor(),
                                 modifier = Modifier
-                                    .background(Ink100.copy(alpha = 0.55f), RoundedCornerShape(topStart = 2.dp, topEnd = 12.dp, bottomStart = 12.dp, bottomEnd = 12.dp))
+                                    .background(dividerColor().copy(alpha = 0.55f), RoundedCornerShape(topStart = 2.dp, topEnd = 12.dp, bottomStart = 12.dp, bottomEnd = 12.dp))
                                     .padding(10.dp)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Icon(
                                 imageVector = Icons.Filled.ThumbUp,
                                 contentDescription = "点赞",
-                                tint = if (reply.isLiked) Primary600 else Ink400,
+                                tint = if (reply.isLiked) brandPrimary() else hintColor(),
                                 modifier = Modifier
                                     .size(16.dp)
                                     .clickable { onToggleLike(reply.commentid) }
@@ -1156,14 +1158,14 @@ private fun Avatar(url: String?, name: String?, size: Int) {
         Box(
             modifier = Modifier
                 .size(size.dp)
-                .background(Ink200, shape),
+                .background(softLine(), shape),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = name?.take(1)?.uppercase() ?: "远",
                 style = if (size >= 40) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = Ink700
+                color = strongTextColor()
             )
         }
     }
@@ -1209,7 +1211,7 @@ private fun RelatedEpisodeRow(
                 text = "EPISODE ${index + 1}",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = Primary600,
+                color = brandPrimary(),
                 letterSpacing = 2.sp
             )
             Spacer(modifier = Modifier.height(2.dp))
@@ -1217,25 +1219,25 @@ private fun RelatedEpisodeRow(
                 text = episode.title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = Ink700,
+                color = strongTextColor(),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(TvIcon, contentDescription = null, tint = Ink400, modifier = Modifier.size(12.dp))
+                Icon(TvIcon, contentDescription = null, tint = hintColor(), modifier = Modifier.size(12.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = podcastTitle ?: "远路英语",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Ink400,
+                    color = hintColor(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
         IconButton(onClick = onAdd) {
-            Icon(Icons.Filled.Add, contentDescription = "加入播放列表", tint = Ink400)
+            Icon(Icons.Filled.Add, contentDescription = "加入播放列表", tint = hintColor())
         }
     }
 }
@@ -1274,13 +1276,13 @@ private fun TranscriptSheet(
                 text = "文稿",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Ink900,
+                color = titleTextColor(),
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = "收起",
                 style = MaterialTheme.typography.labelLarge,
-                color = Primary600,
+                color = brandPrimary(),
                 modifier = Modifier.clickable { onClose() }
             )
         }
@@ -1289,7 +1291,7 @@ private fun TranscriptSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .background(Primary600.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                    .background(brandPrimary().copy(alpha = 0.08f), RoundedCornerShape(12.dp))
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1297,7 +1299,7 @@ private fun TranscriptSheet(
                     text = if (isGuest) "登录后可收听完整内容，当前仅展示前 3 分钟字幕。"
                     else "PRO剧集仅对会员开放，升级会员即可解锁收听。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Ink700,
+                    color = strongTextColor(),
                     modifier = Modifier.weight(1f)
                 )
                 if (isGuest) {
@@ -1305,7 +1307,7 @@ private fun TranscriptSheet(
                         text = "立即登录",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Primary600,
+                        color = brandPrimary(),
                         modifier = Modifier.clickable { onLogin() }
                     )
                 }
@@ -1321,7 +1323,7 @@ private fun TranscriptSheet(
                 Text(
                     text = "暂无字幕",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Ink400
+                    color = hintColor()
                 )
             }
         } else {
@@ -1338,7 +1340,7 @@ private fun TranscriptSheet(
                             .fillMaxWidth()
                             .clickable(enabled = !audioUnavailable) { onSubtitleClick(subtitle) }
                             .background(
-                                color = if (isActive) Primary600.copy(alpha = 0.1f) else Color.Transparent,
+                                color = if (isActive) brandPrimary().copy(alpha = 0.1f) else Color.Transparent,
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .padding(12.dp)
@@ -1347,14 +1349,14 @@ private fun TranscriptSheet(
                             text = subtitle.textEn,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                            color = Ink900
+                            color = titleTextColor()
                         )
                         subtitle.textCn?.takeIf { it.isNotBlank() }?.let { cn ->
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = cn,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Ink600
+                                color = bodyTextColor()
                             )
                         }
                     }

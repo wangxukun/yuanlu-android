@@ -84,6 +84,35 @@ data class SubtitleBundle(
     val audioUrl: String?
 )
 
+// ---------- 词典与生词（对齐 GET /api/dict/{word} 与 /api/vocabulary/*） ----------
+
+/** 词性与释义 */
+data class DictDefinition(
+    val pos: String,
+    val meaningCn: String,
+    val meaningEn: String? = null
+)
+
+/** 词源记忆：前缀/词根/后缀 + 拆解 + 记忆技巧 */
+data class DictEtymology(
+    val prefix: String? = null,
+    val root: String? = null,
+    val suffix: String? = null,
+    val breakdown: String? = null,
+    val mnemonic: String? = null
+)
+
+/** 词典条目（取精听查词弹层所需字段，其余 LLM 字段忽略） */
+data class DictEntry(
+    val word: String,
+    val phoneticsUk: String? = null,
+    val phoneticsUs: String? = null,
+    val audioUk: String? = null,
+    val audioUs: String? = null,
+    val definitions: List<DictDefinition> = emptyList(),
+    val etymology: DictEtymology? = null
+)
+
 /** 剧集评论（树形：根评论带 replies，字段对齐 /api/comment/list） */
 data class Comment(
     val commentid: Int,

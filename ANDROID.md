@@ -1,6 +1,6 @@
 # 远路播客 Android App 开发计划与上下文 (Context & Plan)
 
-> **当前状态**: Phase 2 (M3+M3.5) 已完成（含游客模式/登录弹层/我的页），M4 待启动
+> **当前状态**: Phase 2 播放流程与精听联动闭环已完成（迷你播放条/全屏播放器/精听页），M4 待启动
 > **同步日期**: 2026-08-28
 > **说明**: 本文档汇总了项目的背景上下文、最新开发进度，以及完整的 Android 开发计划，方便在独立仓库中为 AI 助手提供全局 Context。
 
@@ -78,6 +78,36 @@
     - 重构了“发现”页面的布局，去除顶部的“发现”标题和搜索模块，将推荐频道、新播客等模块改为两列三行的网格布局。
     - 在“发现”页面的推荐频道模块添加了“查看更多”功能，点击跳转至全新的“全部频道”页面。
     - 对齐 Web 端的频道卡片设计：频道卡片统一正方形比例，文本水平居中溢出截断；移除了卡片中的“播放”图标，并完美复刻了 Web 端的“频道主页”（Computer 图标）按钮。
+- [x] **Phase 2 - M4 前置: 播放流程与精听联动闭环** (✅ 完成 2026-08-30，编译 + 17 单测通过)
+  - **交互闭环**：剧集详情页「开始精听」→ 起播（精听模式）+ 全局底部弹出迷你播放条 → 点击迷你条平滑展开全屏播放器 → 全屏播放器「精听模式」按钮携带 `episodeId + playbackPosition` 导航至精听页（双语字幕同步高亮/自动滚动/点击跳播）。
+  - **状态层**：`PlayerState` 新增 `isIntensiveMode`；`PlayerController.play(episode, startPositionMs, intensive)` 起播时置位，`setIntensiveMode()` 可后补标记；普通起播自动复位。迷你条可见性由全局共享的 `PlayerShellViewModel`（Activity 作用域，挂在 AppNavHost）从单例 `PlayerController.playerState` 派生（`currentEpisode != null`），导航切换间天然一致。
+  - **新增文件**：`feature/player/PlayerShellViewModel.kt`（全局播放壳）、`MiniPlayerBar.kt`（迷你条：进度线/封面/标题/精听徽标/播放暂停）、`FullScreenPlayerScreen.kt`（沉浸式全屏播放器：封面/Slider/±10·30s/播放暂停/精听按钮）、`PlayerPalette.kt`（播放器系共用品牌色板）；`feature/intensive/IntensiveListeningScreen.kt` + `IntensiveListeningViewModel.kt`（精听页，复用全局 PlayerController，已在播则接续进度仅补精听标记，未播则按携带进度/服务端断点以精听模式起播）。
+  - **路由**：新增 `IntensiveListeningNav(episodeid, positionMs)`；`Navigation.kt` 用 Box 叠加 NavDisplay，迷你条（AnimatedVisibility spring 底部滑入，Main Tab 时抬升 80dp 悬浮于底部导航之上）与全屏播放器（spring 弹入沉浸层）均为全局浮层；进入精听页/展开全屏时自动收起迷你条避免叠底；全屏播放器 BackHandler 支持系统返回收起。
+  - **行为变更**：详情页「开始精听」不再自动弹文稿层（改为起播 + 迷你条联动）；游客/无音频直链时退回打开文稿弹层做 3 分钟预览（原 Web 对齐口径保留）。手动「文稿」按钮不受影响。
+  - **无障碍与反馈**：精听按钮（曙光橙胶囊 + GraphicEq 图标）带 Ripple、`contentDescription="精听模式"`、`onClickLabel="进入精听模式"`；播放/暂停/±10·30s/收起等图标均有中文无障碍标签。
+  - **验证**：`compileDebugKotlin` / `assembleDebug` / `testDebugUnitTest`（17/17）全部通过；单测未覆盖播放链路（`PlayerController` 依赖 ExoPlayer Android 框架类，与 `PlayerViewModel` 既有口径一致，依赖模拟器 E2E 实测）。
+- [x] **Phase 2 - M4 前置 II: 迷你条/全屏播放器 Web 移动端复刻** (✅ 完成 2026-08-30，编译 + 17 单测通过)
+  - **迷你播放条 1:1 复刻 Web `MobilePlayerBar.tsx`**：通栏贴边（左右 0 外边距、上缘 2dp 远青渐变进度线 + border-t）；60dp 内容行 = 40dp 封面（播放中叠加 4 柱均衡器动效，复刻 tailwind `animate-eq`）+ 标题/播客名 + 40dp 远青播放圆钮（按压 0.9 缩放）+ **关闭图标**（停止播放并隐藏浮条，对齐 Web `closePlayer`）。Main Tab 紧贴底部导航上缘（无侧边距），其余页面贴屏幕底（背景铺满手势区，内容 `navigationBarsPadding`）；深浅色随外观设置切换（浅 white/95·ink-100 边框 / 深 ink-900/95·ink-800）。
+  - **全屏播放器复刻 Web `MobilePlayerSheet.tsx` 展开式播放器**：顶部窄栏（expand_more 收起 / close 关闭停止）+ 拖把；**16:9 封面**（最大宽 320dp，点击跳剧集详情，精听中带角标）+ 居中标题/播客名；自绘进度条（6dp 圆角轨道 + 16dp 白芯描边拖把，支持点按/拖动，双端显示 当前/-剩余）；控制排 = **倍速循环切换按钮（1/1.25/1.5/2/0.75x，对齐 `cyclePlaybackRate`）** + 上一集（重播本集）+ 64dp 播放大圆钮（缓冲转圈）+ 下一集（队列占位提示）+ 循环模式（不循环/列表/单曲，映射 Media3 repeatMode）；精听橙色胶囊入口保留。深浅色随外观设置切换（浅 base-100 / 深 ink-950）。
+  - **状态层扩展**：`PlayerState` +`playbackRate`/`loopMode`（`LoopMode` 枚举）；`PlayerController` +`stop()`（复位并隐藏浮条）/`setPlaybackRate`/`cyclePlaybackRate`/`toggleLoopMode`；`PlayerShellViewModel` 同步透出。深浅色判定统一走 `isDarkAppearance()`（由 colorScheme.background 亮度反推，外观设置三态即时生效）。
+- [x] **Phase 2 - M4 前置 III: 全屏播放器布局改版 + 定时关闭 + 详情页深色修复** (✅ 完成 2026-08-30，编译 + 17 单测通过)
+  - **全屏播放器布局改版（参照用户截图）**：页面上部改为弹性留白区（将来互动讨论评论在此滚动展示），封面（16:9）/标题及作者/进度条/控制按钮群整个模块下沉；进度条正上方新增一行——居左「播放列表」图标（队列占位提示）、居右「定时关闭」闹钟图标（激活时远青高亮并显示剩余描述）；「精听模式」橙色胶囊固定页面最底部；风格保持 yuanlu Web 移动端（浅 base-100 / 深 ink-950 + 远青主色，外观设置三态即时生效）。
+  - **定时关闭（截图2 复刻）**：`PlayerState` +`sleepTimer`/`lastSleepConfig`；`PlayerController` +`applySleepConfig(SleepConfig)`（按时间=协程倒计时到点暂停 / 按集数=STATE_ENDED 结算递减 / 播完本集）与 `cancelSleepTimer()`。点击闹钟弹出 ModalBottomSheet：「上次定时 + Switch（重开/取消）」→ 按时间（播完整集声音再停止 + 15/30/60/90分/自定义占位）→ 按集数（本集/2/3/5集）→ 设置定时启播（占位）。迷你条/全屏播放器闹钟图标实时显示定时状态。
+  - **剧集详情页深色模式 BUG 修复**：`PlayerScreen` 原硬编码浅色 ink 阶梯，深色模式下页面仍为浅底浅字。现全部中性色经 `pageBg()/dividerColor()/titleTextColor()` 等 @Composable 取值函数按 `isDarkAppearance()` 切换（背景 ink-950、分隔 ink-800、文字 ink-50/300/400、主色 primary-400），文稿弹层底色同步适配；品牌绿/橙 CTA 与封面上角标保持不变。
+- [x] **Phase 2 - M4 前置 IV: 精听页 Web 复刻（句/词级高亮 + 循环体系）** (✅ 完成 2026-08-30，编译 + 17 单测通过)
+  - **三级高亮（复刻 Web InteractiveTranscript/SubtitleItem）**：当前句 = primary-50 卡片 + 左侧 3dp primary-500 竖线 + 粗体主题色文字；已读句前景色加深（ink-800 / dark ink-200）；未读句淡化（ink-400 / dark ink-500）；正在读的单词曙光橙背景高亮（`buildAnnotatedString` + `SubtitleWord.start/end` 词级时间戳，浅 accent-100 / 深 accent-900-40%），仅当前句播放中生效。
+  - **循环体系**：①单句循环——当前句右下角 repeat/repeat_one 小按钮锁定该句，ViewModel 收集播放位置，锁定句越过 end 即 seek 回 start（保留 500ms 手动跳播保护，对齐 Web lastJumpTimeRef 口径）；②单集循环 ↔ 多集顺序播放——右下角浮动按钮切换（`PlayerController.setLoopMode`，REPEAT_ONE/REPEAT_OFF，Toast 提示当前模式）。
+  - **右下角浮动按钮列**（对齐 Web quick actions：半透明底 + 阴影 + 激活态主题色）：翻译开关（显示/隐藏中文译文，AnimatedVisibility 折叠动画，默认隐藏）+ 循环模式切换；底部抬高 76dp 避让迷你条。
+  - **底部播放器替换**：移除精听页内自绘播放控制条，由全局迷你播放条接管（Navigation 不再对 IntensiveListeningNav 隐藏迷你条），列表底部预留 88dp。
+  - **深色模式适配**：整页（背景 ink-50/ink-950、顶栏、句/词高亮、浮动按钮）按 `isDarkAppearance()` 切换。
+  - 顶栏对齐 Web 精听头部形态（下箭头返回 / 居中「精听模式」标题 / × 关闭）；游客 3 分钟预览横幅保留。
+  - **实测反馈修复（4 项）**：①当前句内已读词补 accent 前景色高亮（accent-700/dark accent-300，对齐 Web `useWordHighlight` 已读词字体色，正在读词保留背景光斑）；②滚动逻辑复刻 Web `useTranscriptScroll`——当前句滚到视口 30% 处停住，仅越过上安全区（<120dp）或下安全区（>65% 视口高）才滚动，不再恒定顶格；③浮动按钮/列表底距改为 `navigationBars inset + 63dp 迷你条高 + 间距` 动态避让（手势/三键导航均适配）；④当前句移除左侧 3dp 竖线，仅保留 primary-50 卡片底。
+- [x] **Phase 2 - M4 前置 V: 精听页查词保存生词 + 精读/听写模式** (✅ 完成 2026-08-30，编译 + 23 单测通过)
+  - **点词查词与生词本（复刻 Web VocabularyModal/handleWordClick/handleSaveVocabulary）**：词级点击（annotated string + tap 偏移定位词区间）→ 暂停播放 → 底部弹层：单词 + 收藏/关闭、英美音标与发音（MediaPlayer 播 OSS 音频，弹层关闭释放）、词性释义卡、词源记忆卡（前缀/词根/后缀 chips + 拆解 + 记忆技巧，默认收缩）、底栏「来源：剧集 + 完成学习 →」。保存走 POST api/vocabulary/add（definition 由释义拼装、携带上下文句/译文/时间戳/发音 URL），已保存态由 GET api/vocabulary/words 懒加载缓存；游客保存给「请先登录」提示，403/400 映射配额与重复收藏文案。
+  - **精读/听写模式 Tab（复刻 Web MobilePlayerSheet 头部）**：顶栏居中「📖 精读 | ✍️ 听写」胶囊分段。听写模式：倍速降 0.8（切回精读恢复 1.0，对齐 Web）、当前句自动循环（loopTarget 口径）、当前句渲染 DictationRow——逐词槽位（已对 primary 粗体 / 输满且错红色删除线 / 待填虚线下划槽，错 3 次显示提示，标点词自动通过）、透明 BasicTextField 覆盖捕获键入（去空格按清洗长度切块，对齐 Web inputWords 算法）、整句正确自动跳下一句（末句暂停）、键盘 Done 错误计数；非当前句淡化展示可点击跳播。
+  - **数据层**：`DictEntry/DictDefinition/DictEtymology` 领域模型 + DTO（snake_case @SerialName）+ `ContentApi`（dict/{word}、vocabulary/add、vocabulary/words）+ Repository 三方法（含 401/403/429/400 文案映射）。
+  - **🚨 后端 Bearer 兼容（yuanlu 仓库，M3.6 同款教训）**：`guard.ts` 新增 `authWithMobile()`（cookie 优先、Bearer 兜底、允许匿名）；`api/dict/[word]` 两处 `auth()` → `authWithMobile()`（匿名缓存查询不受影响、登录用户配额正确归属）；`api/vocabulary/words` 与 `api/vocabulary/add` 改走 `requireAuth()`。
+  - **验证**：`compileDebugKotlin`/`assembleDebug`/`testDebugUnitTest` 23/23（新增 `DictationUtilsTest` 6 例：清洗/分词/切块/标点占位/截断/整句判定）。
 - [ ] **Phase 2 - M4及以后**: 见下方详细开发计划。
 
 ---

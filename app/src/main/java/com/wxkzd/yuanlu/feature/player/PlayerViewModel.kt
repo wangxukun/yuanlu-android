@@ -179,23 +179,38 @@ class PlayerViewModel @Inject constructor(
         _toast.value = null
     }
 
-    /** 封面/播放键/开始精听共用：当前剧集在播则暂停，否则断点续播起播 */
-    fun togglePlayback() {
+    /**
+     * 封面/播放键/开始精听共用：当前剧集在播则暂停，否则断点续播起播。
+     * [intensive] = true 时以精听模式起播（PlayerState 带精听标记，迷你条/全屏播放器显示指示器）。
+     */
+    fun togglePlayback(intensive: Boolean = false) {
         val state = _uiState.value
         val episode = state.episode ?: return
         val audioUrl = state.audioUrl
         if (audioUrl.isNullOrBlank()) return // 未登录：由 UI 层引导登录
         if (playerState.value.currentEpisode?.episodeid == episode.episodeid) {
+            if (intensive) playerController.setIntensiveMode(true)
             playerController.togglePlayPause()
         } else {
-            playerController.play(episode.copy(audioUrl = audioUrl), startPositionMs = resumePositionMs(episode))
+            playerController.play(
+                episode.copy(audioUrl = audioUrl),
+                startPositionMs = resumePositionMs(episode),
+                intensive = intensive
+            )
         }
     }
 
-    /** 开始精听：起播/暂停并打开沉浸式文稿（对齐 Web 移动端行为） */
+    /**
+     * 开始精听：起播并进入精听模式——全局底部弹出迷你播放条（含精听指示器），
+     * 由迷你条 → 全屏播放器 → 精听按钮逐级进入精听页。
+     * 无音频直链（游客/无权限）时退回打开文稿弹层做 3 分钟字幕预览。
+     */
     fun startIntensiveListening() {
-        togglePlayback()
-        _uiState.update { it.copy(isTranscriptOpen = true) }
+        if (_uiState.value.audioUrl.isNullOrBlank()) {
+            _uiState.update { it.copy(isTranscriptOpen = true) }
+        } else {
+            togglePlayback(intensive = true)
+        }
     }
 
     fun setTranscriptOpen(open: Boolean) {

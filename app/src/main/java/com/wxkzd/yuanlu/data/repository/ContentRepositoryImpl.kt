@@ -4,10 +4,12 @@ import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.ContentApi
 import com.wxkzd.yuanlu.data.remote.dto.CommentDto
 import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.TranslateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.toBundle
 import com.wxkzd.yuanlu.domain.model.ChannelData
+import com.wxkzd.yuanlu.domain.model.DictEntry
 import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
@@ -134,6 +136,93 @@ class ContentRepositoryImpl @Inject constructor(
         likesCount = likesCount,
         isLiked = isLiked
     )
+
+    // ---------- 词典与生词（精听查词） ----------
+
+    override suspend fun lookupWord(word: String): Result<DictEntry> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.lookupWord(word)
+                val data = response.data
+                if (response.success && data != null) {
+                    Result.Success(data.toDomain())
+                } else {
+                    Result.Error(600, response.message ?: response.error ?: "暂无词典数据")
+                }
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: HttpException) {
+                val message = when (e.code()) {
+                    401 -> "请先登录"
+                    403 -> "今日 30 次免费词典查询已用完，升级会员解锁无限查询！"
+                    429 -> "查询过于频繁，请明天再试"
+                    else -> "词典查询失败（${e.code()}）"
+                }
+                Result.Error(e.code(), message)
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "Unexpected error")
+            }
+        }
+
+    override suspend fun addVocabulary(
+        word: String,
+        definition: String,
+        contextSentence: String,
+        translation: String,
+        episodeid: String,
+        timestampSec: Int,
+        speakUrl: String
+    ): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.addVocabulary(
+                    VocabularyAddRequestDto(
+                        word = word,
+                        definition = definition,
+                        contextSentence = contextSentence,
+                        translation = translation,
+                        episodeid = episodeid,
+                        timestamp = timestampSec,
+                        speakUrl = speakUrl
+                    )
+                )
+                if (response.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(600, response.message ?: "保存失败")
+                }
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: HttpException) {
+                val message = when (e.code()) {
+                    400 -> "该单词已在生词本中"
+                    401 -> "请先登录后再保存生词"
+                    403 -> "生词本配额已满，升级会员解锁无限生词本"
+                    else -> "保存失败（${e.code()}）"
+                }
+                Result.Error(e.code(), message)
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "Unexpected error")
+            }
+        }
+
+    override suspend fun getVocabularyWords(): Result<Set<String>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.vocabularyWords()
+                if (response.success) {
+                    Result.Success(response.data.map { it.lowercase() }.toSet())
+                } else {
+                    Result.Success(emptySet())
+                }
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: HttpException) {
+                Result.Error(e.code(), if (e.code() == 401) "请先登录" else "生词本加载失败")
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "Unexpected error")
+            }
+        }
 
     private suspend fun <T> call(block: suspend () -> T): Result<T> =
         withContext(Dispatchers.IO) {

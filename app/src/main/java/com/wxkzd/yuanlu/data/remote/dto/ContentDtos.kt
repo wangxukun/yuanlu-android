@@ -9,6 +9,7 @@ import com.wxkzd.yuanlu.domain.model.Subtitle
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
 import com.wxkzd.yuanlu.domain.model.SubtitleWord
 import com.wxkzd.yuanlu.domain.model.Tag
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -221,4 +222,95 @@ data class ChannelDataDto(
 fun SubtitlesResponseDto.toBundle() = SubtitleBundle(
     subtitles = data.map { it.toDomain() },
     audioUrl = audioUrl
+)
+
+// ---------- 词典与生词（精听查词，M4 前置 V） ----------
+
+/** GET /api/dict/{word}：信封 { success, data: DictEntryDto, message? }（配额拦截时 403 + message） */
+@Serializable
+data class DictResponseDto(
+    val success: Boolean = false,
+    val data: DictEntryDto? = null,
+    val message: String? = null,
+    val error: String? = null,
+    val code: Int? = null
+)
+
+@Serializable
+data class DictEntryDto(
+    val word: String = "",
+    val phonetics: DictPhoneticsDto? = null,
+    @SerialName("audio_urls") val audioUrls: DictAudioUrlsDto? = null,
+    val definitions: List<DictDefinitionDto> = emptyList(),
+    val etymology: DictEtymologyDto? = null
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.DictEntry(
+        word = word,
+        phoneticsUk = phonetics?.uk?.takeIf { it.isNotBlank() },
+        phoneticsUs = phonetics?.us?.takeIf { it.isNotBlank() },
+        audioUk = audioUrls?.uk?.takeIf { it.isNotBlank() },
+        audioUs = audioUrls?.us?.takeIf { it.isNotBlank() },
+        definitions = definitions.map { it.toDomain() },
+        etymology = etymology?.takeIf { it.prefix != null || it.root != null || it.suffix != null || !it.breakdown.isNullOrBlank() || !it.mnemonic.isNullOrBlank() }?.toDomain()
+    )
+}
+
+@Serializable
+data class DictPhoneticsDto(val uk: String? = null, val us: String? = null)
+
+@Serializable
+data class DictAudioUrlsDto(val uk: String? = null, val us: String? = null)
+
+@Serializable
+data class DictDefinitionDto(
+    val pos: String? = null,
+    @SerialName("meaning_cn") val meaningCn: String? = null,
+    @SerialName("meaning_en") val meaningEn: String? = null
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.DictDefinition(
+        pos = pos ?: "",
+        meaningCn = meaningCn ?: "",
+        meaningEn = meaningEn?.takeIf { it.isNotBlank() }
+    )
+}
+
+@Serializable
+data class DictEtymologyDto(
+    val prefix: String? = null,
+    val root: String? = null,
+    val suffix: String? = null,
+    val breakdown: String? = null,
+    val mnemonic: String? = null
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.DictEtymology(prefix, root, suffix, breakdown, mnemonic)
+}
+
+/** POST /api/vocabulary/add 请求体（字段对齐 Web handleSaveVocabulary） */
+@Serializable
+data class VocabularyAddRequestDto(
+    val word: String,
+    val definition: String,
+    val contextSentence: String,
+    val translation: String,
+    val episodeid: String,
+    val timestamp: Int,
+    val speakUrl: String,
+    val dictUrl: String = "",
+    val webUrl: String = "",
+    val mobileUrl: String = ""
+)
+
+/** 裸 { success } 或 { success:false, message }（400=已在生词本 403=配额） */
+@Serializable
+data class VocabularyAddResponseDto(
+    val success: Boolean = false,
+    val message: String? = null
+)
+
+/** GET /api/vocabulary/words：信封 { success, data: string[] } */
+@Serializable
+data class VocabularyWordsResponseDto(
+    val success: Boolean = false,
+    val data: List<String> = emptyList(),
+    val message: String? = null
 )

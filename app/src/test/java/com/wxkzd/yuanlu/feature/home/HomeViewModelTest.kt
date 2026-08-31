@@ -163,6 +163,23 @@ private class FakeContentRepository(
     override suspend fun toggleCommentLike(commentid: Int): Result<Boolean> =
         Result.Success(false)
 
+    // 词典与生词（精听查词）：本仓库测试不涉及，给出空实现以满足接口
+    override suspend fun lookupWord(word: String): Result<com.wxkzd.yuanlu.domain.model.DictEntry> =
+        com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+
+    override suspend fun addVocabulary(
+        word: String,
+        definition: String,
+        contextSentence: String,
+        translation: String,
+        episodeid: String,
+        timestampSec: Int,
+        speakUrl: String
+    ): Result<Unit> = com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+
+    override suspend fun getVocabularyWords(): Result<Set<String>> =
+        com.wxkzd.yuanlu.core.network.Result.Success(emptySet())
+
     override suspend fun translate(text: String): Result<String> =
         Result.Error(0, "not implemented in fake")
 }

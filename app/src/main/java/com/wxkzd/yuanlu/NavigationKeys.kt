@@ -12,4 +12,13 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class PlayerNav(val episodeid: String) : NavKey
 
+/**
+ * 精听页：由全屏播放器「精听模式」按钮进入，
+ * 携带当前 episodeId + playbackPosition（ms），进入后同步接续播放。
+ */
+@Serializable data class IntensiveListeningNav(
+    val episodeid: String,
+    val positionMs: Long = 0L
+) : NavKey
+
 @Serializable data object ChannelListNav : NavKey
