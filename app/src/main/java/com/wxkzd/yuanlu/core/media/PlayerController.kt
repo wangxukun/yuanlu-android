@@ -64,8 +64,10 @@ class PlayerController @Inject constructor(
             .setMediaId(episode.episodeid)
             .build()
 
-        // 起播重置为正常倍速：防止上一首/外部控件残留的快放静默延续到新播放
-        exoPlayer.setPlaybackSpeed(1f)
+        // 起播重置为正常倍速：防止上一首/外部控件残留的快放静默延续到新播放。
+        // 注意只在当前速度非 1x 时才调用——无条件调用会显式激活 Sonic 变速管线，
+        // 模拟器/部分设备的音频后端上会出现"前 1~2 秒正常、随后加速+杂音"的欠载失真。
+        resetSpeedIfChanged()
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         if (startPositionMs > 0) {
@@ -98,14 +100,24 @@ class PlayerController @Inject constructor(
         sleepJob = null
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
-        exoPlayer.setPlaybackSpeed(1f)
+        resetSpeedIfChanged()
         _playerState.value = PlayerState()
     }
 
     /** 设置播放倍速（Media3 setPlaybackSpeed，立即生效并同步进状态流） */
     fun setPlaybackRate(rate: Float) {
-        exoPlayer.setPlaybackSpeed(rate)
+        // 与当前一致时跳过，避免无谓触发变速管线重配置
+        if (exoPlayer.playbackParameters.speed != rate) {
+            exoPlayer.setPlaybackSpeed(rate)
+        }
         _playerState.update { it.copy(playbackRate = rate) }
+    }
+
+    /** 仅在实际速度 ≠ 1x 时才显式复位；速度已是 1x 时保持默认播放路径（不经过变速处理器） */
+    private fun resetSpeedIfChanged() {
+        if (exoPlayer.playbackParameters.speed != 1f) {
+            exoPlayer.setPlaybackSpeed(1f)
+        }
     }
 
     /** 倍速循环切换：1 → 1.25 → 1.5 → 2 → 0.75 → 1（对齐 Web cyclePlaybackRate） */
