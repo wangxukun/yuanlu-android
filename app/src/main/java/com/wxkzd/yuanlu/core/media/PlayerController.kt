@@ -3,6 +3,7 @@ package com.wxkzd.yuanlu.core.media
 import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
 import com.wxkzd.yuanlu.domain.model.Episode
 import kotlinx.coroutines.*
@@ -42,6 +43,14 @@ class PlayerController @Inject constructor(
                     handleSleepOnEpisodeEnded()
                 }
             }
+
+            /**
+             * 倍速参数变化（含系统媒体控件/蓝牙/车机等外部下发）同步进状态流。
+             * 不监听会导致 UI 显示 1x 而实际快放的静默 desync——正是"没设置却变快"的根因。
+             */
+            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+                _playerState.update { it.copy(playbackRate = playbackParameters.speed) }
+            }
         })
     }
 
@@ -55,6 +64,8 @@ class PlayerController @Inject constructor(
             .setMediaId(episode.episodeid)
             .build()
 
+        // 起播重置为正常倍速：防止上一首/外部控件残留的快放静默延续到新播放
+        exoPlayer.setPlaybackSpeed(1f)
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         if (startPositionMs > 0) {
@@ -67,6 +78,7 @@ class PlayerController @Inject constructor(
                 currentEpisode = episode,
                 currentPosition = startPositionMs,
                 duration = if (episode.duration > 0) episode.duration * 1000L else 0L,
+                playbackRate = 1f,
                 isIntensiveMode = intensive
             )
         }

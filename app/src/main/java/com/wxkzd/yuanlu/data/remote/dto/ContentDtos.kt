@@ -74,7 +74,8 @@ data class PodcastRefDto(
 
 @Serializable
 data class EpisodeUserStateDto(
-    val progressSeconds: Int? = null,
+    /** 后端 Prisma Float，保留 3 位小数（如 123.456）——必须是 Double，Int 会解析失败 */
+    val progressSeconds: Double? = null,
     val isFinished: Boolean? = null,
     val lastListenAt: String? = null,
     val isFavorited: Boolean? = null
@@ -100,7 +101,7 @@ data class EpisodeDto(
     val podcast: PodcastRefDto? = null,
     val tags: List<TagDto>? = null,
     val isFavorited: Boolean? = null,
-    val progressSeconds: Int? = null,
+    val progressSeconds: Double? = null,
     val isFinished: Boolean? = null,
     val userState: EpisodeUserStateDto? = null
 ) {
@@ -121,7 +122,7 @@ data class EpisodeDto(
         podcastTitle = podcast?.title,
         tags = tags.orEmpty().map { it.toDomain() },
         isFavorited = isFavorited ?: userState?.isFavorited ?: false,
-        progressSeconds = progressSeconds ?: userState?.progressSeconds ?: 0,
+        progressSeconds = (progressSeconds ?: userState?.progressSeconds ?: 0.0).toInt(),
         isFinished = isFinished ?: userState?.isFinished ?: false
     )
 }

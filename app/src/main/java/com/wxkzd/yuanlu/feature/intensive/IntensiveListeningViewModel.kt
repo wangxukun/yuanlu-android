@@ -98,6 +98,9 @@ class IntensiveListeningViewModel @Inject constructor(
     /** 手动跳播时间戳：循环回跳需避开刚点句后的 500ms（对齐 Web lastJumpTimeRef 口径） */
     private var lastJumpAtMs = 0L
 
+    /** 进入听写模式前的用户倍速（切回精读时恢复，而非硬编码 1x） */
+    private var rateBeforeDictate = 1f
+
     /** 已保存生词缓存（登录后懒加载，用于查词弹层已保存态） */
     private var savedWords: Set<String>? = null
 
@@ -185,13 +188,20 @@ class IntensiveListeningViewModel @Inject constructor(
     // ---------- 精读 / 听写模式 ----------
 
     /**
-     * 切换精读/听写（对齐 Web）：听写降为 0.8 倍速、精读恢复 1.0；
+     * 切换精读/听写（对齐 Web）：听写降为 0.8 倍速、精读恢复进入听写前的倍速；
      * 听写模式下当前句自动循环（见 init 收集器的 DICTATE 分支）。
      */
     fun setTranscriptMode(mode: TranscriptMode) {
-        if (_uiState.value.transcriptMode == mode) return
+        val previous = _uiState.value.transcriptMode
+        if (previous == mode) return
+        if (mode == TranscriptMode.DICTATE) {
+            rateBeforeDictate = playerState.value.playbackRate
+            playerController.setPlaybackRate(0.8f)
+        } else if (previous == TranscriptMode.DICTATE) {
+            // 恢复进入听写前的倍速（用户原本可能是 1.25x/1.5x）
+            playerController.setPlaybackRate(rateBeforeDictate)
+        }
         _uiState.update { it.copy(transcriptMode = mode) }
-        playerController.setPlaybackRate(if (mode == TranscriptMode.DICTATE) 0.8f else 1f)
     }
 
     /** 听写完成整句：跳下一句继续（对齐 Web handleDictationSuccess）；末句则暂停 */
