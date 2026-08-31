@@ -1,6 +1,8 @@
 package com.wxkzd.yuanlu.data
 
 import com.wxkzd.yuanlu.core.auth.TokenStore
+import com.wxkzd.yuanlu.core.media.PlayerController
+import com.wxkzd.yuanlu.core.media.ProgressReporter
 import com.wxkzd.yuanlu.data.remote.AuthApi
 import com.wxkzd.yuanlu.data.remote.ContentApi
 import com.wxkzd.yuanlu.data.repository.AuthRepositoryImpl
@@ -12,6 +14,9 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import retrofit2.Retrofit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import javax.inject.Singleton
 
 @Module
@@ -43,5 +48,21 @@ object DataModule {
     @Singleton
     fun provideContentRepository(api: ContentApi): ContentRepository {
         return ContentRepositoryImpl(api)
+    }
+
+    /** 应用级进度上报器：观察全局播放状态流，防抖上报 listening_history */
+    @Provides
+    @Singleton
+    fun provideProgressReporter(
+        playerController: PlayerController,
+        tokenStore: TokenStore,
+        contentRepository: ContentRepository
+    ): ProgressReporter {
+        return ProgressReporter(
+            playerState = playerController.playerState,
+            tokenFlow = tokenStore.tokenFlow,
+            repository = contentRepository,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        )
     }
 }

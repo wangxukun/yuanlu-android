@@ -183,6 +183,12 @@ private class FakeContentRepository(
     override suspend fun getVocabularyWords(): Result<Set<String>> =
         com.wxkzd.yuanlu.core.network.Result.Success(emptySet())
 
+    override suspend fun updateEpisodeProgress(
+        episodeid: String,
+        progressSeconds: Float,
+        isFinished: Boolean
+    ): Result<Unit> = com.wxkzd.yuanlu.core.network.Result.Success(Unit)
+
     override suspend fun translate(text: String): Result<String> =
         Result.Error(0, "not implemented in fake")
 }

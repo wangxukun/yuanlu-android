@@ -11,6 +11,7 @@ import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.PodcastDetailDto
 import com.wxkzd.yuanlu.data.remote.dto.PodcastDto
+import com.wxkzd.yuanlu.data.remote.dto.ProgressUpdateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.SubtitlesResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.TagDto
 import com.wxkzd.yuanlu.data.remote.dto.TranslateRequestDto
@@ -18,8 +19,10 @@ import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyWordsResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.YoudaoResponseDto
+import kotlinx.serialization.json.JsonElement
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -106,4 +109,13 @@ interface ContentApi {
     /** 信封：data = 已保存单词小写列表（用于查询弹层已保存态） */
     @GET("api/vocabulary/words")
     suspend fun vocabularyWords(): VocabularyWordsResponseDto
+
+    // ---------- 播放进度上报 ----------
+
+    /** 信封 { success, message, data: listening_history 行 }；data 仅作确认用 */
+    @PATCH("api/episode/{episodeid}/progress")
+    suspend fun updateProgress(
+        @Path("episodeid") episodeid: String,
+        @Body body: ProgressUpdateRequestDto
+    ): ApiResponse<JsonElement>
 }

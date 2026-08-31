@@ -6,6 +6,7 @@ import com.wxkzd.yuanlu.data.remote.dto.CommentDto
 import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.ProgressUpdateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.TranslateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.toBundle
 import com.wxkzd.yuanlu.domain.model.ChannelData
@@ -223,6 +224,20 @@ class ContentRepositoryImpl @Inject constructor(
                 Result.Error(600, e.message ?: "Unexpected error")
             }
         }
+
+    override suspend fun updateEpisodeProgress(
+        episodeid: String,
+        progressSeconds: Float,
+        isFinished: Boolean
+    ): Result<Unit> = call {
+        val response = api.updateProgress(
+            episodeid,
+            ProgressUpdateRequestDto(progressSeconds, isFinished)
+        )
+        if (!response.success) {
+            throw IOException(response.error ?: "进度保存失败")
+        }
+    }
 
     private suspend fun <T> call(block: suspend () -> T): Result<T> =
         withContext(Dispatchers.IO) {

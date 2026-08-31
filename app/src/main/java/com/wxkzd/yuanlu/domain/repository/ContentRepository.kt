@@ -75,4 +75,16 @@ interface ContentRepository {
 
     /** 已保存单词集合（小写；未登录返回空集语义由调用方处理） */
     suspend fun getVocabularyWords(): Result<Set<String>>
+
+    // ---------- 播放进度上报 ----------
+
+    /**
+     * 上报收听进度（PATCH api/episode/{id}/progress，需登录）。
+     * 服务端写入 listening_history，驱动历史页 / 断点续播 / 跨端进度条。
+     */
+    suspend fun updateEpisodeProgress(
+        episodeid: String,
+        progressSeconds: Float,
+        isFinished: Boolean
+    ): Result<Unit>
 }

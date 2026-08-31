@@ -314,3 +314,12 @@ data class VocabularyWordsResponseDto(
     val data: List<String> = emptyList(),
     val message: String? = null
 )
+
+// ---------- 播放进度上报（M4 历史联动前置） ----------
+
+/** PATCH /api/episode/{id}/progress 请求体（对齐 Web useSaveProgress） */
+@Serializable
+data class ProgressUpdateRequestDto(
+    val progressSeconds: Float,
+    val isFinished: Boolean
+)
