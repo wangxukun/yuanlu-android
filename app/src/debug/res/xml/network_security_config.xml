@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- debug 专用覆盖：放行明文 http，便于模拟器(10.0.2.2)与真机局域网 IP 联调本地 dev 服务。 -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="InsecureBaseConfiguration">
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

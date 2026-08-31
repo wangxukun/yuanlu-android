@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 主配置（release 生效）：全局禁止明文流量，仅允许 HTTPS。
+     debug 构建有独立的宽松覆盖（app/src/debug/res/xml/），支持模拟器/局域网 http 联调。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

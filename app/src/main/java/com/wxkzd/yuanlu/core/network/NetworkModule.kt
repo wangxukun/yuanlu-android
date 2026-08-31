@@ -1,5 +1,6 @@
 package com.wxkzd.yuanlu.core.network
 
+import com.wxkzd.yuanlu.BuildConfig
 import com.wxkzd.yuanlu.core.auth.AuthInterceptor
 import dagger.Module
 import dagger.Provides
@@ -18,8 +19,6 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "http://10.0.2.2:3000/"
-
     @Provides
     @Singleton
     fun provideJson(): Json = Json {
@@ -30,17 +29,20 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
-        val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        }
-
-        return OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
-            .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .build()
+
+        // 日志分级：仅 debug 构建打印完整请求/响应体（含 Authorization 头），release 关闭防泄漏
+        if (BuildConfig.DEBUG) {
+            builder.addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BODY
+            })
+        }
+
+        return builder.build()
     }
 
     @Provides
@@ -48,7 +50,7 @@ object NetworkModule {
     fun provideRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(BuildConfig.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()

@@ -21,7 +21,10 @@ class AuthInterceptor @Inject constructor(
         val request = requestBuilder.build()
         val response = chain.proceed(request)
 
-        if (response.code == 401) {
+        // 401 → 清除登录态。但必须排除 /api/auth/**：登录接口自身的 401
+        // 表示"邮箱或密码错误"，若不排除会把当前已登录账号的有效 Token 误清掉。
+        val isAuthEndpoint = response.request.url.encodedPath.startsWith("/api/auth/")
+        if (response.code == 401 && !isAuthEndpoint) {
             runBlocking {
                 tokenStore.clear()
             }

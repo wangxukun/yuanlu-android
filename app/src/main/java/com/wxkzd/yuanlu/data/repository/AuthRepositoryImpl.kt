@@ -10,6 +10,13 @@ import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import com.wxkzd.yuanlu.domain.repository.SmsSendStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import retrofit2.HttpException
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,10 +36,15 @@ class AuthRepositoryImpl @Inject constructor(
                     tokenStore.saveToken(response.data.token)
                     Result.Success(Unit)
                 } else {
-                    Result.Error(response.code ?: 400, response.error ?: "Login failed")
+                    Result.Error(response.code ?: 400, response.error ?: "登录失败，请稍后重试")
                 }
-            } catch (e: Exception) {
+            } catch (e: HttpException) {
+                // 后端登录失败返回 4xx + { success:false, error:"邮箱或密码错误" }，透出真实文案
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
                 Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "登录失败")
             }
         }
     }
@@ -47,10 +59,14 @@ class AuthRepositoryImpl @Inject constructor(
                     tokenStore.saveToken(response.data.token)
                     Result.Success(Unit)
                 } else {
-                    Result.Error(response.code ?: 400, response.error ?: "Login failed")
+                    Result.Error(response.code ?: 400, response.error ?: "登录失败，请稍后重试")
                 }
-            } catch (e: Exception) {
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
                 Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "登录失败")
             }
         }
     }
@@ -76,8 +92,12 @@ class AuthRepositoryImpl @Inject constructor(
                         }
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
                 Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "验证码发送失败")
             }
         }
     }
@@ -86,15 +106,36 @@ class AuthRepositoryImpl @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 Result.Success(api.userProfile().toDomain())
-            } catch (e: retrofit2.HttpException) {
-                if (e.code() == 401) {
-                    Result.Error(401, "请先登录")
-                } else {
-                    Result.Error(e.code(), "加载用户信息失败")
-                }
-            } catch (e: Exception) {
+            } catch (e: HttpException) {
+                // requireAuth 的 401 响应体自带 "请先登录" 文案，统一走 errorMessage()
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
                 Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "加载用户信息失败")
             }
         }
     }
+
+    /**
+     * 解析后端 4xx/5xx 响应体（{ success, error | message }），提取用户可读文案；
+     * 解析失败时回退为带状态码的通用提示。读取后关闭 body 防止连接泄漏。
+     */
+    private fun HttpException.errorMessage(): String {
+        val body = try {
+            response()?.errorBody()?.string()
+        } catch (_: Exception) {
+            null
+        }
+        val parsed = body?.let {
+            runCatching { Json.parseToJsonElement(it).jsonObject }.getOrNull()
+        }
+        return parsed?.get("error").asText()
+            ?: parsed?.get("message").asText()
+            ?: "请求失败（HTTP ${code()}）"
+    }
+
+    /** 安全读取 JSON 字段文本：非原始类型（对象/数组/JSON null）返回 null 而非抛异常 */
+    private fun JsonElement?.asText(): String? =
+        (this as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
 }

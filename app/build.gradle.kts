@@ -1,9 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
+}
+
+// local.properties 注入环境相关配置（该文件不入库）
+val localProperties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) {
+        localFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -17,12 +27,6 @@ android {
         versionName = "1.0"
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-        }
-    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -30,8 +34,30 @@ android {
     buildFeatures {
         compose = true
         aidl = false
-        buildConfig = false
+        buildConfig = true
         shaders = false
+    }
+
+    buildTypes {
+        debug {
+            // 默认指向 Android 模拟器的宿主机 dev 服务；
+            // 真机联调时在 local.properties 配置 debug.baseUrl=http://<局域网IP>:3000/
+            buildConfigField(
+                "String",
+                "BASE_URL",
+                "\"${localProperties.getProperty("debug.baseUrl") ?: "http://10.0.2.2:3000/"}\""
+            )
+        }
+        release {
+            isMinifyEnabled = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // 生产 API 与 Web 端共用同一 Next.js 服务；如需覆盖（灰度/预发）在 local.properties 配 release.baseUrl
+            buildConfigField(
+                "String",
+                "BASE_URL",
+                "\"${localProperties.getProperty("release.baseUrl") ?: "https://www.wxkzd.com/"}\""
+            )
+        }
     }
 
     packaging {
@@ -113,4 +139,3 @@ dependencies {
     // Serialization
     implementation(libs.kotlinx.serialization.json)
 }
-
