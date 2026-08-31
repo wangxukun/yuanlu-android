@@ -1,7 +1,7 @@
 # 远路播客 Android App 开发计划与上下文 (Context & Plan)
 
-> **当前状态**: Phase 2 播放流程与精听联动闭环已完成（迷你播放条/全屏播放器/精听页 + 查词/听写），M4 待启动
-> **同步日期**: 2026-08-31
+> **当前状态**: Phase 2 全部完成；跨端联调 P0 修复（评论 Bearer/登录错误映射/安全加固）、播放进度上报闭环、断点续播与倍速异常修复已就绪。M4 待启动——**后端需先补收藏列表/历史分页/学习路径 REST 接口**
+> **同步日期**: 2026-09-01
 > **说明**: 本文档汇总了项目的背景上下文、最新开发进度，以及完整的 Android 开发计划，方便在独立仓库中为 AI 助手提供全局 Context。
 
 ---
@@ -112,6 +112,26 @@
   - **查词弹窗全屏**：`VocabularySheet` 的 `ModalBottomSheet` 改为 `fillMaxSize` + `rememberModalBottomSheetState(skipPartiallyExpanded = true)` + `RectangleShape`，点词弹层直接铺满整屏（不再半屏停靠）；内容列 `fillMaxSize` 并以 `weight(1f)` 弹性留白，底栏「来源：剧集 + 完成学习 →」固定屏幕底端；顶部拖把保留，可下滑关闭。
   - **词源记忆卡排版修复（模拟器实测反馈，2 项）**：①收起态标题「🧬 词源记忆」取消 `weight(1f)`，预览文本（词根/前缀/后缀）改为单行 + `TextOverflow.Ellipsis` 占满剩余宽度——修复长预览把标题挤成竖排单字；②展开态前缀/词根/后缀 chips 由不换行 `Row` 改为 `FlowRow`（横/纵 8dp 间距，放不下自动换行）——修复长 chip 被挤成细长竖条、拆解文字排版错乱。
   - **验证**：`compileDebugKotlin` / `testDebugUnitTest` 23/23 通过（纯 UI 布局改动，未新增测试）。
+- [x] **Phase 2 - P0 跨端联调修复批次** (✅ 完成 2026-08-31，两端构建/测试/lint 全绿)
+  - **🚨 后端 Bearer 补丁第二批（yuanlu 仓库 feat/android-app，36f8dd6）**：`comment/create`、`comment/like` 由 cookie-only `auth()` → `requireAuth()`（修复 Android 登录态发评论/点赞必 401 的真 Bug）；`comment/list` → `authWithMobile()`（登录用户 isLiked 点赞态恢复正确，匿名可浏览不变）；`vocabulary/list`、`vocabulary/delete` → `requireAuth()`（提前补 M5 缺口）。Web 前端仅判断 res.ok，行为零变化。
+  - **Android 登录错误映射**：`AuthRepositoryImpl` 四方法 `HttpException` 单独 catch 并解析后端 `{success, error|message}` 响应体——密码错误如实透出"邮箱或密码错误"，不再被 `catch(Exception)` 吞成"网络错误"；`NetworkError` 仅保留给 `IOException`。
+  - **AuthInterceptor 401 排除**：`/api/auth/**` 的 401（登录失败语义）不再清 Token——已登录用户试登其他账号输错密码时，不再被静默踢出登录态。
+  - **BASE_URL 环境化**：`buildConfig=true`；debug 默认 `http://10.0.2.2:3000/`、release 默认 `https://www.wxkzd.com/`（生产域名已实测 TLS/API 可达），`local.properties` 可用 `debug.baseUrl`/`release.baseUrl` 覆盖（真机局域网联调/灰度预发）。
+  - **安全加固**：`usesCleartextTraffic` → `networkSecurityConfig`（release 全局禁明文仅 HTTPS；debug source set 独立放宽支持局域网 http）；manifest 挂载 `backup_rules`/`data_extraction_rules` 并排除 `auth_prefs.preferences_pb`（JWT 不随云备份/换机迁移泄漏）；`HttpLoggingInterceptor BODY` 仅 debug 构建启用；补建 `proguard-rules.pro`（kotlinx.serialization/Retrofit/OkHttp 规则基线，开混淆不再构建失败）。
+  - **验证**：后端 `tsc --noEmit`+eslint 零错误；Android `compileDebug`/`compileRelease`/`assembleDebug`/23 单测全过，lint 38→36（清零 2 条 UnusedResources）。
+- [x] **Phase 2 - 播放进度上报闭环（M4 硬前置）** (✅ 完成 2026-08-31，31 单测通过)
+  - **ProgressReporter 应用级单例**（`YuanluApplication.onCreate` 启动，与全局播放器同生命周期——后台播放/跨页面/迷你条场景持续生效，ViewModel 作用域做不到）：观察 `PlayerController.playerState` + `tokenFlow`。
+  - **策略对齐 Web `useSaveProgress`**：播放中与上次保存位置相差 ≥15s 周期上报；暂停/停止立即上报；`STATE_ENDED` 或进入结尾 5s 标记 `isFinished=true` 且只报一次（单曲循环重播不覆盖回 false）；切集/关闭播放器冲刷上一集最终进度（跳过已完成与重复值）；游客（无 Token）完全跳过；上报失败静默。
+  - **数据层**：`ContentApi.updateProgress`（PATCH `api/episode/{id}/progress`，Bearer 已兼容）+ `ProgressUpdateRequestDto` + Repository `updateEpisodeProgress`。
+  - **单测 8 例**（周期防抖/暂停冲刷/结尾完成/播完一次性+循环不覆盖/切集冲刷与不覆盖已完成/关闭冲刷/游客跳过/重复暂停去重）。⚠️ 踩坑记录：`runTest` 中 `advanceUntilIdle()` 不处理 StateFlow 的后续发射，必须用 `runCurrent()`（最小实验验证过）。
+- [x] **Phase 2 - 断点续播修复 + 倍速异常修复** (✅ 完成 2026-08-31，本地 dev 端到端实测通过)
+  - **🚨 断点续播根因（后端为主）**：①`episode/detail` 从未查询 `listening_history`——REST 根本不返回 userState（实测 PATCH 成功后 detail 的 `userState: null`），断点续播一直是 0；②`detail`/`list-by-podcastid` 用 cookie-only `auth()`，Bearer 用户拿不到身份；③隐藏地雷：Prisma `progressSeconds` 为 Float（如 123.456），Android DTO 声明 `Int?` 会在后端真返回进度时解析崩溃。
+  - **后端修复（3b58a89）**：`episode/detail` 改 `authWithMobile()` + 并查 `listening_history`/`episode_favorites` 返回 `userState { progressSeconds, isFinished, lastListenAt, isFavorited }`；`list-by-podcastid` 改 `authWithMobile()`（Bearer 用户的剧集列表进度条/收藏态恢复）。
+  - **Android 修复**：`EpisodeDto`/`EpisodeUserStateDto` 的 `progressSeconds` `Int?`→`Double?`（映射 domain 时 `toInt()`，进度条/续播计算不受影响）。
+  - **倍速异常（三层修复）**：①`play()` 起播复位 1x + 新增 `onPlaybackParametersChanged` 监听把外部倍速变化（蓝牙/车机/系统媒体控件下发）同步进状态流——消除"UI 显示 1x 实际 2x"的静默 desync；②精听切回精读恢复**进入听写前的倍速**（不再硬编码 1f）；③**仅在速度实际变化时才调用 `setPlaybackSpeed`**——无条件调用（即使目标是 1x）会显式激活 Sonic 变速管线，模拟器/部分设备音频后端出现"前 1~2 秒正常 → 随后加速 + 嘈杂音"的欠载失真。
+  - **播放器基建**：Media3 1.4.1 → **1.11.0**（跨 7 个 minor 的音频管线修复）；`PlaybackService.onDestroy` 不再 `release()` 共享单例播放器（Service 重建后播放异常的隐患）；ExoPlayer 补 `AudioAttributes(SPEECH)` + 音频焦点 + 拔耳机暂停 + 锁屏唤醒；精听听写句子循环回跳补 500ms 节流与脏字幕（`end<=start` 会每 tick 回跳造成"快进"听感）防护。
+  - **实测**：本地 dev 端到端验证 `PATCH → detail.userState` 返回浮点进度（95.678）；模拟器断播续听用户确认恢复。
+  - **⚠️ 模拟器音频快放+杂音最终定位**：宿主 Windows 音频后端问题（模拟器浏览器音频同症状，非 App bug）。处置：模拟器 Cold Boot / 调整宿主声音设置（关独占模式/音效增强/改默认格式）/真机验证。
 - [ ] **Phase 2 - M4及以后**: 见下方详细开发计划。
 
 ---
