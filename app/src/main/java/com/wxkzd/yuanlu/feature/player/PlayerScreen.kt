@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -35,7 +36,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Button
@@ -942,7 +942,7 @@ private fun CommentForm(
                     if (isSubmitting) {
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
                     } else {
-                        Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("发布", fontWeight = FontWeight.Bold)
                     }
@@ -1090,7 +1090,7 @@ private fun CommentItem(
                             },
                             enabled = replyContent.isNotBlank()
                         ) {
-                            Icon(Icons.Filled.Send, contentDescription = "发送回复", tint = brandPrimary())
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送回复", tint = brandPrimary())
                         }
                     }
                 }

@@ -21,11 +21,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -194,7 +194,7 @@ fun VocabularySheet(
                         entry.phoneticsUk?.let {
                             Text(text = it, style = MaterialTheme.typography.bodySmall, color = subColor)
                             Icon(
-                                imageVector = Icons.Filled.VolumeUp,
+                                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = "播放发音 (UK)",
                                 tint = Primary600,
                                 modifier = Modifier
@@ -207,7 +207,7 @@ fun VocabularySheet(
                             Text(text = "|", style = MaterialTheme.typography.bodySmall, color = subColor.copy(alpha = 0.4f))
                             Text(text = entry.phoneticsUs, style = MaterialTheme.typography.bodySmall, color = subColor)
                             Icon(
-                                imageVector = Icons.Filled.VolumeUp,
+                                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = "播放发音 (US)",
                                 tint = Primary600,
                                 modifier = Modifier

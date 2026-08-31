@@ -18,11 +18,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
@@ -140,7 +140,7 @@ fun ProfileScreen(
                 if (isLoggedIn) {
                     MenuRow("消息通知", Icons.Filled.Notifications, MaterialTheme.colorScheme.primary) { comingSoon("消息通知") }
                 }
-                MenuRow("帮助与支持", Icons.Filled.HelpOutline, MaterialTheme.colorScheme.tertiary) { comingSoon("帮助与支持") }
+                MenuRow("帮助与支持", Icons.AutoMirrored.Filled.HelpOutline, MaterialTheme.colorScheme.tertiary) { comingSoon("帮助与支持") }
             }
 
             // ---- 退出登录（仅登录） ----
