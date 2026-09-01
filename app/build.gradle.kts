@@ -19,6 +19,21 @@ val localProperties = Properties().apply {
 android {
     namespace = "com.wxkzd.yuanlu"
     compileSdk = 36
+
+    signingConfigs {
+        create("release") {
+            // 签名信息来自 local.properties（不入库）：
+            // release.storeFile / release.storePassword / release.keyAlias / release.keyPassword
+            val storeFilePath = localProperties.getProperty("release.storeFile")
+            if (storeFilePath != null) {
+                storeFile = rootProject.file(storeFilePath)
+                storePassword = localProperties.getProperty("release.storePassword")
+                keyAlias = localProperties.getProperty("release.keyAlias")
+                keyPassword = localProperties.getProperty("release.keyPassword")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.wxkzd.yuanlu"
         minSdk = 24
@@ -57,6 +72,10 @@ android {
                 "BASE_URL",
                 "\"${localProperties.getProperty("release.baseUrl") ?: "https://www.wxkzd.com/"}\""
             )
+            // 未配置签名信息时保持未签名构建（如在 CI 环境拉取仓库后）
+            if (localProperties.getProperty("release.storeFile") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
