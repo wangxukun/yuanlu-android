@@ -1,7 +1,7 @@
 # 远路播客 Android App 开发计划与上下文 (Context & Plan)
 
-> **当前状态**: Phase 2 全部完成；跨端联调 P0 修复（评论 Bearer/登录错误映射/安全加固）、播放进度上报闭环、断点续播与倍速异常修复已就绪。M4 待启动——**后端需先补收藏列表/历史分页/学习路径 REST 接口**
-> **同步日期**: 2026-09-01
+> **当前状态**: Phase 2 全部完成；跨端联调 P0 修复（评论 Bearer/登录错误映射/安全加固）、播放进度上报闭环、断点续播与倍速异常修复已就绪；精听听写流程强化（单句强制循环/正确自动流转/完成结算）与发现页顶部间距对齐完成，模拟器 + 真机验证通过。M4 待启动——**后端需先补收藏列表/历史分页/学习路径 REST 接口**
+> **同步日期**: 2026-09-02
 > **说明**: 本文档汇总了项目的背景上下文、最新开发进度，以及完整的 Android 开发计划，方便在独立仓库中为 AI 助手提供全局 Context。
 
 ---
@@ -132,6 +132,13 @@
   - **播放器基建**：Media3 1.4.1 → **1.11.0**（跨 7 个 minor 的音频管线修复）；`PlaybackService.onDestroy` 不再 `release()` 共享单例播放器（Service 重建后播放异常的隐患）；ExoPlayer 补 `AudioAttributes(SPEECH)` + 音频焦点 + 拔耳机暂停 + 锁屏唤醒；精听听写句子循环回跳补 500ms 节流与脏字幕（`end<=start` 会每 tick 回跳造成"快进"听感）防护。
   - **实测**：本地 dev 端到端验证 `PATCH → detail.userState` 返回浮点进度（95.678）；模拟器断播续听用户确认恢复。
   - **⚠️ 模拟器音频快放+杂音最终定位**：宿主 Windows 音频后端问题（模拟器浏览器音频同症状，非 App bug）。处置：模拟器 Cold Boot / 调整宿主声音设置（关独占模式/音效增强/改默认格式）/真机验证。
+- [x] **Phase 2 - 精听听写流程强化 + 发现页间距对齐** (✅ 完成 2026-09-02，编译通过 + 模拟器/真机实测)
+  - **听写单句强制循环（根因修复）**：听写循环目标由「播放位置反查字幕」（字幕间 gap 会使 `activeIdx=-1` 丢失循环目标、播放逃逸到下一句）改为 `IntensiveUiState.dictationIndex` **显式当前句下标**——未通过校验前播放到 `endTime` 即 seek 回 `startTime` 无限循环，gap 内也持续锁定；进入听写按播放位置初始化当前句（所在句 → 下一句 → 末句兜底），先切听写 Tab 后字幕异步到达时补初始化。
+  - **正确后自动流转**：整句拼对 → ✓ 图标 + 底色 250ms 高亮反馈（约 0.4s，期间本句继续循环）→ `dictationIndex+1` + seek 下一句 `start` + `PlayerController.resume()` 保证起播（用户可能手动暂停过）；听写槽位随 `subtitle.id` 重建，输入天然清空；反馈期 `LaunchedEffect` 随行销毁自动取消，手动切句不误触发。
+  - **边界与生命周期**：末句拼对 → 解除循环 + 暂停 + 「🎉 听写完成」结算弹层（句数统计 + 再来一轮 / 返回精读），`getOrNull(index+1)` 判空无越界；手动点句显式同步 `dictationIndex` 并刷新 `lastJumpAtMs` 节流（防 seek 风暴）；离开页面循环收集器随 `viewModelScope` 销毁，无后台漏循环。
+  - **PlayerController**：新增 `resume()`——仅非 `STATE_IDLE` 时 `play()`，不触碰倍速/循环模式/队列/定时关闭，既有播放控制状态零影响。
+  - **发现页与首页顶部间距对齐**：`DiscoverScreen` 移除 Scaffold `innerPadding`（已含状态栏 inset）之外的**重复 `statusBarsPadding()`**（多出一整个状态栏高度），`LazyColumn` 补 `contentPadding top = 8.dp`——两页标题顶部间距统一为「Scaffold 状态栏 inset + 8dp 列表 padding + 8dp SectionHeader 内边距」。
+  - **验证**：`compileDebugKotlin` 全绿；模拟器（Medium_Phone / Android 17）与真机（华为 LYA-AL00 / Android 10）安装运行无崩溃，生产 API 数据正常。⚠️ 真机教训：机上旧版为 release 签名，debug 直装报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`——用项目 keystore 构建 `assembleRelease` 覆盖安装即可（签名匹配、原有数据保留）。
 - [ ] **Phase 2 - M4及以后**: 见下方详细开发计划。
 
 ---
