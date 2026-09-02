@@ -41,7 +41,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,7 +81,7 @@ fun DiscoverScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         when {
             state.isLoading -> DiscoverSkeleton()
             state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::load)
@@ -112,7 +111,7 @@ private fun BrowseContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // ---- 热门节目 ----
