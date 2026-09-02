@@ -1,7 +1,9 @@
 package com.wxkzd.yuanlu.feature.intensive
 
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -37,15 +39,18 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -103,6 +108,7 @@ import com.wxkzd.yuanlu.feature.player.isDarkAppearance
 import com.wxkzd.yuanlu.ui.components.EmptyBox
 import com.wxkzd.yuanlu.ui.components.ErrorBox
 import com.wxkzd.yuanlu.ui.components.LoadingBox
+import kotlinx.coroutines.delay
 
 /** 迷你播放条内容高（2dp 进度线 + 60dp 行），随导航栏 inset 动态避让 */
 private val MiniBarHeight = 63.dp
@@ -221,6 +227,7 @@ fun IntensiveListeningScreen(
                             positionSec = playerState.currentPosition / 1000.0,
                             showTranslation = uiState.showTranslation,
                             loopingIndex = uiState.loopingIndex,
+                            dictationIndex = uiState.dictationIndex,
                             transcriptMode = uiState.transcriptMode,
                             seekEnabled = !uiState.audioUrl.isNullOrBlank(),
                             onSubtitleClick = viewModel::seekToSubtitle,
@@ -286,6 +293,31 @@ fun IntensiveListeningScreen(
             onClose = viewModel::closeWordSheet
         )
     }
+
+    // ---- 听写完成结算弹层（末句拼写正确触发；循环已随 dictationFinished 解除） ----
+    if (uiState.dictationFinished) {
+        DictationFinishDialog(
+            totalCount = uiState.subtitles.size,
+            onRestart = viewModel::restartDictation,
+            onExit = { viewModel.setTranscriptMode(TranscriptMode.READ) }
+        )
+    }
+}
+
+/** 听写完成结算：本轮句数统计 + 再来一轮 / 返回精读 */
+@Composable
+private fun DictationFinishDialog(
+    totalCount: Int,
+    onRestart: () -> Unit,
+    onExit: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onExit,
+        title = { Text(text = "🎉 听写完成") },
+        text = { Text(text = "已正确拼写全部 $totalCount 句，完成了一整轮听写！") },
+        confirmButton = { TextButton(onClick = onRestart) { Text("再来一轮") } },
+        dismissButton = { TextButton(onClick = onExit) { Text("返回精读") } }
+    )
 }
 
 /** 精读 / 听写模式 Tab（复刻 Web：📖 精读 | ✍️ 听写 胶囊分段） */
@@ -352,22 +384,26 @@ private fun SubtitleList(
     positionSec: Double,
     showTranslation: Boolean,
     loopingIndex: Int?,
+    /** 听写模式显式当前句（成功流转 / 点句跳转更新），null 表示非听写 */
+    dictationIndex: Int?,
     transcriptMode: TranscriptMode,
     seekEnabled: Boolean,
     onSubtitleClick: (Subtitle) -> Unit,
     onToggleSentenceLoop: (Int) -> Unit,
     onWordClick: (word: String, contextEn: String, contextCn: String, timestampSec: Double) -> Unit,
-    onDictationSuccess: () -> Unit
+    onDictationSuccess: (Int) -> Unit
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    LaunchedEffect(activeIndex) {
-        if (activeIndex < 0) return@LaunchedEffect
+    // 听写模式跟随显式 dictationIndex（位置推导在字幕 gap 间会闪跳）
+    val followIndex = if (transcriptMode == TranscriptMode.DICTATE) dictationIndex ?: activeIndex else activeIndex
+    LaunchedEffect(followIndex) {
+        if (followIndex < 0) return@LaunchedEffect
         val viewport = listState.layoutInfo.viewportSize.height.toFloat()
         if (viewport <= 0) return@LaunchedEffect
-        val visible = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIndex }
+        val visible = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == followIndex }
         if (visible == null) {
             // 不在视口内：直接滚到目标位（当前句顶部停在视口 30% 处）
             val anchor = with(density) { (viewport * 0.3f).toInt() }
@@ -397,8 +433,9 @@ private fun SubtitleList(
     ) {
         itemsIndexed(subtitles, key = { _, sub -> sub.id }) { index, subtitle ->
             when {
-                // 听写模式：当前句渲染听写槽位
-                transcriptMode == TranscriptMode.DICTATE && index == activeIndex -> DictationRow(
+                // 听写模式：显式当前句渲染听写槽位
+                transcriptMode == TranscriptMode.DICTATE && index == dictationIndex -> DictationRow(
+                    index = index,
                     subtitle = subtitle,
                     isPlaying = isPlaying,
                     showTranslation = showTranslation,
@@ -591,16 +628,18 @@ private fun SubtitleRow(
 /**
  * 听写行（复刻 Web DictationItem）：当前句渲染逐词槽位——
  * 已对 primary 粗体 / 输满且错红色删除线（错 3 次显示提示）/ 待填虚线下划槽；
- * 透明输入框覆盖全行捕获键入，整句正确自动跳下一句，回车（Done）错误计数。
+ * 透明输入框覆盖全行捕获键入，整句正确给完成反馈（✓ + 底色高亮）后自动流转下一句，
+ * 下一句以 subtitle.id 重建槽位（输入天然清空），回车（Done）错误计数。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DictationRow(
+    index: Int,
     subtitle: Subtitle,
     isPlaying: Boolean,
     showTranslation: Boolean,
     onJump: () -> Unit,
-    onSuccess: () -> Unit
+    onSuccess: (Int) -> Unit
 ) {
     val isDark = isDarkAppearance()
     val targets = remember(subtitle.id) { dictationTargets(subtitle.textEn) }
@@ -612,11 +651,12 @@ private fun DictationRow(
     val inputWords = remember(input, subtitle.id) { chunkDictationInput(input, targets) }
     val isCorrect = isDictationCorrect(targets, inputWords)
 
-    // 整句正确 → 自动进入下一句（每句只触发一次）
+    // 整句正确 → 完成反馈可见约 0.4s（期间本句继续循环）→ 自动流转下一句（每句只触发一次）
     LaunchedEffect(isCorrect, subtitle.id) {
         if (isCorrect && !completed) {
             completed = true
-            onSuccess()
+            delay(400)
+            onSuccess(index)
         }
     }
     // 成为当前句时自动聚焦（弹出键盘）
@@ -630,12 +670,21 @@ private fun DictationRow(
 
     val matchedColor = if (isDark) Primary400 else Primary600
     val hintColor = Color(0xFF4A7FA5) // 远青青蓝 info
+    // 完成反馈：底色向 primary 加深 + 播放键换 ✓
+    val rowBackground by animateColorAsState(
+        targetValue = when {
+            completed -> matchedColor.copy(alpha = if (isDark) 0.32f else 0.24f)
+            else -> if (isDark) Primary900.copy(alpha = 0.2f) else Primary50
+        },
+        animationSpec = tween(durationMillis = 250),
+        label = "dictationRowBackground"
+    )
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isDark) Primary900.copy(alpha = 0.2f) else Primary50)
+            .background(rowBackground)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
@@ -643,14 +692,14 @@ private fun DictationRow(
         ) {
             // 左侧播放键：点击重播本句
             Icon(
-                imageVector = Icons.Filled.PlayCircle,
-                contentDescription = "重播本句",
+                imageVector = if (completed) Icons.Filled.CheckCircle else Icons.Filled.PlayCircle,
+                contentDescription = if (completed) "拼写正确" else "重播本句",
                 tint = matchedColor,
                 modifier = Modifier
                     .padding(top = 4.dp)
                     .size(26.dp)
                     .clip(CircleShape)
-                    .clickable { onJump() }
+                    .clickable(enabled = !completed) { onJump() }
             )
             Spacer(modifier = Modifier.width(10.dp))
 

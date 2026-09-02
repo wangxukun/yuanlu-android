@@ -55,6 +55,14 @@ data class IntensiveUiState(
      * 锁定句播完（越过 end）自动跳回 start 循环。
      */
     val loopingIndex: Int? = null,
+    /**
+     * 听写模式当前句下标（显式状态，而非播放位置推导）：
+     * 拼写正确后 +1 流转 / 点句跳转跟随；进入听写时按播放位置初始化。
+     * 显式化后循环不受字幕间 gap 影响（位置落在 gap 时旧逻辑会丢失循环目标）。
+     */
+    val dictationIndex: Int? = null,
+    /** 本轮听写已完成（末句拼写正确后置位，触发结算弹层并停止循环） */
+    val dictationFinished: Boolean = false,
     /** 精读 / 听写模式（听写：0.8 倍速 + 当前句自动循环 + 拼写校验） */
     val transcriptMode: TranscriptMode = TranscriptMode.READ,
     /** 查词弹层；null 关闭 */
@@ -105,16 +113,17 @@ class IntensiveListeningViewModel @Inject constructor(
     private var savedWords: Set<String>? = null
 
     init {
-        // 循环边界：单句循环锁定句；听写模式下自动跟随当前句（对齐 Web loopTarget 逻辑）
+        // 循环边界：单句循环锁定句；听写模式跟随显式 dictationIndex（对齐 Web loopTarget 逻辑）。
+        // 到达 endTime 未通过校验 → seek 回 startTime 无限循环；viewModelScope 随页面销毁自动取消收集。
         viewModelScope.launch {
             combine(
                 playerController.playerState,
                 _uiState
             ) { p, ui ->
-                val positionSec = p.currentPosition / 1000.0
-                val activeIdx = ui.subtitles.indexOfFirst { positionSec >= it.start && positionSec <= it.end }
                 val target = ui.loopingIndex
-                    ?: if (ui.transcriptMode == TranscriptMode.DICTATE && activeIdx >= 0) activeIdx else null
+                    ?: ui.dictationIndex.takeIf {
+                        ui.transcriptMode == TranscriptMode.DICTATE && !ui.dictationFinished
+                    }
                 Triple(p.isPlaying, p.currentPosition, target?.let { ui.subtitles.getOrNull(it) })
             }.distinctUntilChanged().collect { (isPlaying, positionMs, loopSub) ->
                 // end <= start 的脏字幕会触发每次 tick 都回跳的 seek 风暴（听感"快进"），跳过
@@ -164,8 +173,14 @@ class IntensiveListeningViewModel @Inject constructor(
                 }
                 else -> Unit
             }
-            _uiState.update {
-                it.copy(isLoading = false, episode = episode, audioUrl = audioUrl, subtitles = subtitles)
+            _uiState.update { s ->
+                val next = s.copy(isLoading = false, episode = episode, audioUrl = audioUrl, subtitles = subtitles)
+                // 边界：用户先切到听写 Tab、字幕异步到达时补初始化当前句，避免无循环目标
+                if (next.transcriptMode == TranscriptMode.DICTATE && next.dictationIndex == null) {
+                    next.copy(dictationIndex = nearestIndexFor(subtitles, playerState.value.currentPosition))
+                } else {
+                    next
+                }
             }
             ensurePlayback(playbackPositionMs)
         }
@@ -192,7 +207,7 @@ class IntensiveListeningViewModel @Inject constructor(
 
     /**
      * 切换精读/听写（对齐 Web）：听写降为 0.8 倍速、精读恢复进入听写前的倍速；
-     * 听写模式下当前句自动循环（见 init 收集器的 DICTATE 分支）。
+     * 听写模式下当前句强制循环（见 init 收集器）。
      */
     fun setTranscriptMode(mode: TranscriptMode) {
         val previous = _uiState.value.transcriptMode
@@ -200,25 +215,64 @@ class IntensiveListeningViewModel @Inject constructor(
         if (mode == TranscriptMode.DICTATE) {
             rateBeforeDictate = playerState.value.playbackRate
             playerController.setPlaybackRate(0.8f)
+            _uiState.update {
+                it.copy(
+                    transcriptMode = mode,
+                    dictationIndex = nearestDictationIndex(),
+                    dictationFinished = false
+                )
+            }
         } else if (previous == TranscriptMode.DICTATE) {
             // 恢复进入听写前的倍速（用户原本可能是 1.25x/1.5x）
             playerController.setPlaybackRate(rateBeforeDictate)
+            _uiState.update {
+                it.copy(transcriptMode = mode, dictationIndex = null, dictationFinished = false)
+            }
         }
-        _uiState.update { it.copy(transcriptMode = mode) }
     }
 
-    /** 听写完成整句：跳下一句继续（对齐 Web handleDictationSuccess）；末句则暂停 */
-    fun onDictationSuccess() {
+    /**
+     * 听写完成整句（对齐 Web handleDictationSuccess + 越界保护）：
+     * 正确后切换到下一句 [start, end] 区间并保证起播；末句则停止循环、
+     * 暂停播放并进入听写完成结算态。
+     */
+    fun onDictationSuccess(index: Int) {
         val ui = _uiState.value
-        val active = activeSubtitleIndex.value
-        if (active < 0) return
-        val next = ui.subtitles.getOrNull(active + 1)
+        if (ui.transcriptMode != TranscriptMode.DICTATE) return
+        if (index !in ui.subtitles.indices) return
         lastJumpAtMs = SystemClock.elapsedRealtime()
+        val next = ui.subtitles.getOrNull(index + 1)
         if (next != null) {
+            _uiState.update { it.copy(dictationIndex = index + 1, dictationFinished = false) }
             playerController.seekTo((next.start * 1000).toLong())
+            playerController.resume() // 用户可能手动暂停过，成功流转必须起播下一句
         } else {
+            // 末句：dictationFinished 置位即解除循环目标（见 init 收集器），再显式暂停兜底
+            _uiState.update { it.copy(dictationFinished = true) }
             playerController.pause()
         }
+    }
+
+    /** 结算弹层「再来一轮」：回到第一句重新开始听写 */
+    fun restartDictation() {
+        val first = _uiState.value.subtitles.firstOrNull() ?: return
+        lastJumpAtMs = SystemClock.elapsedRealtime()
+        _uiState.update { it.copy(dictationIndex = 0, dictationFinished = false) }
+        playerController.seekTo((first.start * 1000).toLong())
+        playerController.resume()
+    }
+
+    /** 进入听写时的起始句：优先播放位置所在句，其次下一句，兜底末句 */
+    private fun nearestDictationIndex(): Int? =
+        nearestIndexFor(_uiState.value.subtitles, playerState.value.currentPosition)
+
+    private fun nearestIndexFor(subs: List<Subtitle>, positionMs: Long): Int? {
+        if (subs.isEmpty()) return null
+        val posSec = positionMs / 1000.0
+        val active = subs.indexOfFirst { posSec >= it.start && posSec <= it.end }
+        if (active >= 0) return active
+        val next = subs.indexOfFirst { it.start > posSec }
+        return if (next >= 0) next else subs.lastIndex
     }
 
     // ---------- 循环控制 ----------
@@ -349,6 +403,15 @@ class IntensiveListeningViewModel @Inject constructor(
 
     fun seekToSubtitle(subtitle: Subtitle) {
         lastJumpAtMs = SystemClock.elapsedRealtime()
+        // 听写模式手动切句：显式同步 dictationIndex，循环目标随句切换（输入槽位随 subtitle.id 重建清空）
+        _uiState.update { ui ->
+            if (ui.transcriptMode == TranscriptMode.DICTATE) {
+                val idx = ui.subtitles.indexOfFirst { it.id == subtitle.id }
+                if (idx >= 0) ui.copy(dictationIndex = idx, dictationFinished = false) else ui
+            } else {
+                ui
+            }
+        }
         playerController.seekTo((subtitle.start * 1000).toLong())
     }
 

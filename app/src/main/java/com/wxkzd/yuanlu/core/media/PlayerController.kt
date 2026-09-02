@@ -236,6 +236,16 @@ class PlayerController @Inject constructor(
         exoPlayer.pause()
     }
 
+    /**
+     * 恢复播放（听写成功后流转下一句等场景）：仅在已有媒体且非空闲态时生效，
+     * 不触碰倍速、循环模式与队列——保持既有播放器控制状态不变。
+     */
+    fun resume() {
+        if (exoPlayer.playbackState != Player.STATE_IDLE) {
+            exoPlayer.play()
+        }
+    }
+
     fun seekTo(positionMs: Long) {
         exoPlayer.seekTo(positionMs.coerceIn(0L, exoPlayer.duration.takeIf { it > 0 } ?: Long.MAX_VALUE))
         _playerState.update { it.copy(currentPosition = positionMs) }
