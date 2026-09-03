@@ -31,6 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,14 +62,21 @@ fun CoverImage(
     url: String?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 16.dp
+    cornerRadius: Dp = 16.dp,
+    /** 主封面加载/解码失败后的回退（通常为所属播客专辑封面）；仍失败走字母占位 */
+    fallbackUrl: String? = null
 ) {
     val shape = RoundedCornerShape(cornerRadius)
-    if (isLoadableCoverUrl(url)) {
+    // 候选链：单集封面 → 专辑封面（对齐 Web episode || podcast || default）；
+    // onError 逐级降级，覆盖 404/403 与低版本 Android 解码不了 AVIF 等加载期失败
+    val candidates = remember(url, fallbackUrl) { coverCandidates(url, fallbackUrl) }
+    var attemptIndex by remember(candidates) { mutableStateOf(0) }
+    if (attemptIndex < candidates.size) {
         AsyncImage(
-            model = url,
+            model = candidates[attemptIndex],
             contentDescription = contentDescription,
             contentScale = ContentScale.Crop,
+            onError = { attemptIndex += 1 },
             modifier = modifier.clip(shape)
         )
     } else {

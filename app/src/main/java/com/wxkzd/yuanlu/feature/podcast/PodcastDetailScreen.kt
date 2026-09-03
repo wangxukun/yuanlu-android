@@ -208,6 +208,8 @@ private fun PodcastDetailContent(
                 CollectionEpisodeRow(
                     episode = episode,
                     seriesName = episode.podcastTitle ?: podcast.title,
+                    // 单集封面解码失败（如 AVIF）时降级到专辑封面（对齐 Web episode || podcast || default）
+                    fallbackCoverUrl = podcast.coverUrl,
                     onClick = { onOpenEpisode(episode.episodeid) }
                 )
             }
@@ -412,6 +414,7 @@ private fun HeaderAction(
 private fun CollectionEpisodeRow(
     episode: Episode,
     seriesName: String,
+    fallbackCoverUrl: String?,
     onClick: () -> Unit
 ) {
     Row(
@@ -426,7 +429,8 @@ private fun CollectionEpisodeRow(
                 url = episode.coverUrl,
                 contentDescription = episode.title,
                 modifier = Modifier.fillMaxSize(),
-                cornerRadius = 8.dp
+                cornerRadius = 8.dp,
+                fallbackUrl = fallbackCoverUrl
             )
             // 难度角标：左上角，与右下角时长角标形成对角（白底彩字，对齐 Web 端 DifficultyBadge）
             episode.difficulty?.takeIf { it.isNotBlank() }?.let { level ->

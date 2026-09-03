@@ -25,3 +25,12 @@ fun isLoadableCoverUrl(url: String?): Boolean {
 fun resolveEpisodeCoverUrl(episodeCoverUrl: String?, podcastCoverUrl: String?): String? =
     episodeCoverUrl?.takeIf { isLoadableCoverUrl(it) }
         ?: podcastCoverUrl?.takeIf { isLoadableCoverUrl(it) }
+
+/**
+ * 封面加载候选链：按入参顺序过滤无效 URL 并去重，依次尝试直到成功。
+ * 覆盖「加载期失败」的回退（404/403/低版本 Android 解码不了 AVIF 等——
+ * 这类 URL 静态检查合法，只有真正请求/解码时才失败）；
+ * 候选全空或全部失败时由 CoverImage 走字母占位。
+ */
+fun coverCandidates(vararg urls: String?): List<String> =
+    urls.mapNotNull { url -> url?.takeIf { isLoadableCoverUrl(it) } }.distinct()

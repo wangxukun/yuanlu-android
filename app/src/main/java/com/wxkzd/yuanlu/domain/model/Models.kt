@@ -30,6 +30,8 @@ data class Episode(
     val title: String,
     val description: String? = null,
     val coverUrl: String? = null,
+    /** 封面加载/解码失败时的回退（通常为所属播客专辑封面），由详情页解析后回填 */
+    val coverFallbackUrl: String? = null,
     val audioUrl: String? = null,
     val duration: Int = 0,
     val playCount: Int = 0,

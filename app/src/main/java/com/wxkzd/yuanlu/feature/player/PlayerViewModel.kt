@@ -9,6 +9,7 @@ import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.Subtitle
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
+import com.wxkzd.yuanlu.ui.components.isLoadableCoverUrl
 import com.wxkzd.yuanlu.ui.components.resolveEpisodeCoverUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -139,23 +140,31 @@ class PlayerViewModel @Inject constructor(
             // 播客详情：detail 接口的 coverUrl 未签名（Web 端在服务端重签），Android 在此替换。
             // 用本接口而非 list-by-podcastid 分页：后者首页仅 100 条，更早的剧集（本播客
             // 2023-05-03 及之前）取不到签名封面，会拿未签名 URL 加载 403 而空白；
-            // 这里一次拿到全量剧集签名封面，并按 剧集封面 → 播客封面 兜底，同时取相关剧集
+            // 这里一次拿到全量剧集签名封面做主封面，同时把播客签名封面挂到 coverFallbackUrl
+            // 供加载期逐级回退（如剧集封面是 AVIF、低版本 Android 解码失败时降级到专辑封面）
             episode.podcastid?.let { podcastid ->
                 launch {
                     when (val detail = contentRepository.getPodcastDetail(podcastid)) {
                         is Result.Success -> {
                             val all = detail.data.episodes
+                            val podcastCover = detail.data.podcast.coverUrl
+                                ?.takeIf { isLoadableCoverUrl(it) }
                             val signedCover = resolveEpisodeCoverUrl(
                                 episodeCoverUrl = all.firstOrNull { it.episodeid == episodeid }?.coverUrl,
                                 podcastCoverUrl = detail.data.podcast.coverUrl
                             )
                             _uiState.update { s ->
                                 s.copy(
-                                    episode = signedCover
-                                        ?.let { cover -> s.episode?.copy(coverUrl = cover) } ?: s.episode,
+                                    episode = s.episode?.let { e ->
+                                        e.copy(
+                                            coverUrl = signedCover ?: e.coverUrl,
+                                            coverFallbackUrl = podcastCover
+                                        )
+                                    },
                                     relatedEpisodes = all
                                         .filter { it.episodeid != episodeid }
                                         .take(5)
+                                        .map { it.copy(coverFallbackUrl = podcastCover) }
                                 )
                             }
                         }

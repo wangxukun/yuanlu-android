@@ -79,4 +79,29 @@ class CoverUrlTest {
         assertEquals(null, resolveEpisodeCoverUrl(UNSIGNED_EPISODE_COVER, null))
         assertEquals(null, resolveEpisodeCoverUrl(UNSIGNED_EPISODE_COVER, "not a url"))
     }
+
+    // ---------- coverCandidates：加载期逐级回退候选链 ----------
+
+    @Test
+    fun `keeps order, filters invalid and dedupes`() {
+        assertEquals(
+            listOf(SIGNED_EPISODE_COVER, SIGNED_PODCAST_COVER),
+            coverCandidates(SIGNED_EPISODE_COVER, SIGNED_PODCAST_COVER)
+        )
+        // 主封面无效（未签名/空/占位）时跳过，专辑封面成为唯一候选
+        assertEquals(
+            listOf(SIGNED_PODCAST_COVER),
+            coverCandidates(UNSIGNED_EPISODE_COVER, null, SIGNED_PODCAST_COVER)
+        )
+        // 完全相同的候选去重，避免同 URL 失败后重复加载
+        assertEquals(
+            listOf(SIGNED_PODCAST_COVER),
+            coverCandidates(SIGNED_PODCAST_COVER, SIGNED_PODCAST_COVER)
+        )
+    }
+
+    @Test
+    fun `empty when all candidates unusable`() {
+        assertTrue(coverCandidates(null, "", DEFAULT_COVER, UNSIGNED_EPISODE_COVER).isEmpty())
+    }
 }

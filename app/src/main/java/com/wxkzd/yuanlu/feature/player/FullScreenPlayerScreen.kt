@@ -217,7 +217,8 @@ fun FullScreenPlayerScreen(
                     url = episode.coverUrl,
                     contentDescription = episode.title,
                     modifier = Modifier.fillMaxSize(),
-                    cornerRadius = 16.dp
+                    cornerRadius = 16.dp,
+                    fallbackUrl = episode.coverFallbackUrl
                 )
                 if (state.isIntensiveMode) {
                     Row(

@@ -130,6 +130,7 @@ fun MiniPlayerBar(
                 CoverImage(
                     url = episode.coverUrl,
                     contentDescription = "正在播放：${episode.title}",
+                    fallbackUrl = episode.coverFallbackUrl,
                     modifier = Modifier
                         .fillMaxSize()
                         .border(

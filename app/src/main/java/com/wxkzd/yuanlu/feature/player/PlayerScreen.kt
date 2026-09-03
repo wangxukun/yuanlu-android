@@ -305,7 +305,8 @@ private fun EpisodeDetailContent(
                     url = episode.coverUrl,
                     contentDescription = episode.title,
                     modifier = Modifier.fillMaxSize(),
-                    cornerRadius = 16.dp
+                    cornerRadius = 16.dp,
+                    fallbackUrl = episode.coverFallbackUrl
                 )
                 // 左上：PRO + 播放数
                 Row(
@@ -1197,7 +1198,8 @@ private fun RelatedEpisodeRow(
                 url = episode.coverUrl,
                 contentDescription = episode.title,
                 modifier = Modifier.fillMaxSize(),
-                cornerRadius = 12.dp
+                cornerRadius = 12.dp,
+                fallbackUrl = episode.coverFallbackUrl
             )
             if (episode.isExclusive) {
                 Box(modifier = Modifier.padding(6.dp)) {
