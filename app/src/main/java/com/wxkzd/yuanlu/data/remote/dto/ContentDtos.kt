@@ -171,7 +171,9 @@ data class PodcastDetailDto(
     val totalPlays: Int? = null,
     val tags: List<TagDto>? = null,
     val isFavorited: Boolean? = null,
-    val channelPodcasts: List<PodcastDto>? = null
+    val channelPodcasts: List<PodcastDto>? = null,
+    /** 全量剧集数组（后端字段名为单数 episode），coverUrl 已签名 */
+    val episode: List<EpisodeDto>? = null
 ) {
     fun toDomain() = PodcastDetail(
         podcast = PodcastDto(
@@ -186,7 +188,8 @@ data class PodcastDetailDto(
             tags = tags
         ).toDomain(),
         isFavorited = isFavorited ?: false,
-        channelPodcasts = channelPodcasts.orEmpty().map { it.toDomain() }
+        channelPodcasts = channelPodcasts.orEmpty().map { it.toDomain() },
+        episodes = episode.orEmpty().map { it.toDomain() }
     )
 }
 

@@ -63,7 +63,9 @@ data class Podcast(
 data class PodcastDetail(
     val podcast: Podcast,
     val isFavorited: Boolean,
-    val channelPodcasts: List<Podcast>
+    val channelPodcasts: List<Podcast>,
+    /** 全量剧集（coverUrl 已签名）：详情页用当前剧集的签名封面替换未签名的 detail coverUrl */
+    val episodes: List<Episode> = emptyList()
 )
 
 data class EpisodePage(

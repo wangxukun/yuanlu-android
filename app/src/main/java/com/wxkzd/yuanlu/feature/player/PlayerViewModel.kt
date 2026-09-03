@@ -9,6 +9,7 @@ import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.Subtitle
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
+import com.wxkzd.yuanlu.ui.components.resolveEpisodeCoverUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -135,19 +136,22 @@ class PlayerViewModel @Inject constructor(
             }
             _uiState.update { it.copy(isLoading = false, episode = episode, audioUrl = audioUrl) }
 
-            // 播客剧集列表：detail 接口的 coverUrl 未签名（Web 端在服务端重签），
-            // Android 用本接口的签名封面替换，同时取相关剧集
+            // 播客详情：detail 接口的 coverUrl 未签名（Web 端在服务端重签），Android 在此替换。
+            // 用本接口而非 list-by-podcastid 分页：后者首页仅 100 条，更早的剧集（本播客
+            // 2023-05-03 及之前）取不到签名封面，会拿未签名 URL 加载 403 而空白；
+            // 这里一次拿到全量剧集签名封面，并按 剧集封面 → 播客封面 兜底，同时取相关剧集
             episode.podcastid?.let { podcastid ->
                 launch {
-                    when (val related = contentRepository.getPodcastEpisodes(
-                        podcastid = podcastid, page = 1, limit = 100, ascending = false
-                    )) {
+                    when (val detail = contentRepository.getPodcastDetail(podcastid)) {
                         is Result.Success -> {
-                            val all = related.data.episodes
-                            val signedCover = all.firstOrNull { it.episodeid == episodeid }?.coverUrl
+                            val all = detail.data.episodes
+                            val signedCover = resolveEpisodeCoverUrl(
+                                episodeCoverUrl = all.firstOrNull { it.episodeid == episodeid }?.coverUrl,
+                                podcastCoverUrl = detail.data.podcast.coverUrl
+                            )
                             _uiState.update { s ->
                                 s.copy(
-                                    episode = signedCover?.takeIf { it.isNotBlank() }
+                                    episode = signedCover
                                         ?.let { cover -> s.episode?.copy(coverUrl = cover) } ?: s.episode,
                                     relatedEpisodes = all
                                         .filter { it.episodeid != episodeid }

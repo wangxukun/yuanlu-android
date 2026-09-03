@@ -54,9 +54,6 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.floor
 
-/** OSS 未签名时的占位值，直接显示字母兜底封面 */
-private const val DEFAULT_COVER = "default_cover_url"
-
 @Composable
 fun CoverImage(
     url: String?,
@@ -65,8 +62,7 @@ fun CoverImage(
     cornerRadius: Dp = 16.dp
 ) {
     val shape = RoundedCornerShape(cornerRadius)
-    val valid = !url.isNullOrBlank() && url != DEFAULT_COVER && url.startsWith("http")
-    if (valid) {
+    if (isLoadableCoverUrl(url)) {
         AsyncImage(
             model = url,
             contentDescription = contentDescription,
