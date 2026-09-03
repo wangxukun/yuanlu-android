@@ -525,6 +525,41 @@ private fun SubtitleRow(
     val words = subtitle.words.orEmpty()
     var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
 
+    // 英文词级内容（对齐 Web SubtitleItem 的双分支）：
+    // JSON 带词级时间戳 → 逐词配色 + 正在读光斑 + 点词查词；
+    // SRT/纯文本 → 按空白分词仅绑点词查词（无词级时间，时间戳退化为句子 start）。
+    val spans: List<WordSpan>
+    val annotated: AnnotatedString = if (words.isNotEmpty()) {
+        val wordSpans = mutableListOf<WordSpan>()
+        val built = buildAnnotatedString {
+            words.forEachIndexed { i, w ->
+                val start = this.length
+                val isCurrentWord = isActive && isPlaying && positionSec >= w.start && positionSec <= w.end
+                val isReadWord = isActive && isPlaying && w.end < positionSec
+                withStyle(
+                    SpanStyle(
+                        color = if (isReadWord) readWordColor else Color.Unspecified,
+                        background = if (isCurrentWord) wordHighlight else Color.Transparent
+                    )
+                ) { append(w.word) }
+                wordSpans.add(WordSpan(w.word, start, this.length - 1, w.start))
+                if (i != words.lastIndex) append(" ")
+            }
+        }
+        spans = wordSpans
+        built
+    } else {
+        val tokens = srtWordTokens(subtitle.textEn)
+        val built = buildAnnotatedString {
+            tokens.forEachIndexed { i, token ->
+                append(token.word)
+                if (i != tokens.lastIndex) append(" ")
+            }
+        }
+        spans = tokens.map { WordSpan(it.word, it.start, it.end, subtitle.start) }
+        built
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -533,55 +568,26 @@ private fun SubtitleRow(
             .clickable(enabled = seekEnabled, onClickLabel = "跳播到此句") { onClick() }
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            // 英文：词级渲染（有词级时间戳时逐词配色 + 点词查词）
-            if (words.isNotEmpty()) {
-                val spans = mutableListOf<WordSpan>()
-                val annotated: AnnotatedString = buildAnnotatedString {
-                    words.forEachIndexed { i, w ->
-                        val start = this.length
-                        val isCurrentWord = isActive && isPlaying && positionSec >= w.start && positionSec <= w.end
-                        val isReadWord = isActive && isPlaying && w.end < positionSec
-                        withStyle(
-                            SpanStyle(
-                                color = if (isReadWord) readWordColor else Color.Unspecified,
-                                background = if (isCurrentWord) wordHighlight else Color.Transparent
-                            )
-                        ) { append(w.word) }
-                        spans.add(WordSpan(w.word, start, this.length - 1, w.start))
-                        if (i != words.lastIndex) append(" ")
-                    }
-                }
-                Text(
-                    text = annotated,
-                    onTextLayout = { textLayout = it },
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 17.sp,
-                        lineHeight = 30.sp,
-                        color = enColor
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pointerInput(subtitle.id) {
-                            detectTapGestures { pos ->
-                                val layout = textLayout ?: return@detectTapGestures
-                                val offset = layout.getOffsetForPosition(pos)
-                                spans.firstOrNull { offset >= it.start && offset <= it.end + 1 }
-                                    ?.let { onWordClick(it.word, it.timeStart) }
-                            }
+            Text(
+                text = annotated,
+                onTextLayout = { textLayout = it },
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 17.sp,
+                    lineHeight = 30.sp,
+                    color = enColor
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(subtitle.id) {
+                        detectTapGestures { pos ->
+                            val layout = textLayout ?: return@detectTapGestures
+                            val offset = layout.getOffsetForPosition(pos)
+                            spans.firstOrNull { offset >= it.start && offset <= it.end + 1 }
+                                ?.let { onWordClick(it.word, it.timeStart) }
                         }
-                )
-            } else {
-                Text(
-                    text = subtitle.textEn,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 17.sp,
-                        lineHeight = 30.sp,
-                        color = enColor
-                    )
-                )
-            }
+                    }
+            )
 
             // 中文译文（右下角翻译浮动按钮控制折叠）
             subtitle.textCn?.takeIf { it.isNotBlank() }?.let { cn ->

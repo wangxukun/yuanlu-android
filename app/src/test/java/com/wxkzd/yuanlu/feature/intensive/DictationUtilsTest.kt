@@ -6,8 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 听写模式核心算法单测（对齐 Web DictationItem 口径）：
- * 清洗、分词、按目标词长切块、整句正确性判定。
+ * 精听页核心算法单测（对齐 Web 口径）：
+ * 听写清洗/分词/切块/正确性判定 + 精读 SRT 点词分词区间。
  */
 class DictationUtilsTest {
 
@@ -26,6 +26,29 @@ class DictationUtilsTest {
             dictationTargets("  Smells are everywhere,   right? ")
         )
         assertEquals(emptyList<String>(), dictationTargets("   "))
+    }
+
+    @Test
+    fun `srtWordTokens 给出单词在拼接文本中的闭区间下标`() {
+        // 拼接文本为 "Smells are everywhere, right?"（单词间单空格）
+        val tokens = srtWordTokens("  Smells are everywhere,\nright? ")
+        assertEquals(
+            listOf(
+                SrtWordToken("Smells", 0, 5),
+                SrtWordToken("are", 7, 9),
+                SrtWordToken("everywhere,", 11, 21),
+                SrtWordToken("right?", 23, 28)
+            ),
+            tokens
+        )
+        // 区间与拼接文本互洽：按下标截出的片段即单词本身
+        val joined = tokens.joinToString(" ") { it.word }
+        tokens.forEach { assertEquals(it.word, joined.substring(it.start, it.end + 1)) }
+    }
+
+    @Test
+    fun `srtWordTokens 空白文本返回空列表`() {
+        assertTrue(srtWordTokens("   \n ").isEmpty())
     }
 
     @Test
