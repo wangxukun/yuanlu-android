@@ -205,17 +205,3 @@ data class AchievementItem(
     val unlocked: Boolean = false,
     val unlockedAt: String? = null
 )
-
-/** 最近收听历史条目（GET api/user/history/recent，最近 3 条） */
-data class RecentHistoryItem(
-    val historyId: Int,
-    val episodeId: String,
-    val title: String,
-    val coverUrl: String? = null,
-    val progress: Int = 0,          // 0-100
-    val progressSeconds: Int = 0,
-    val duration: Int = 0,
-    val listenAt: String? = null,
-    val isFinished: Boolean = false,
-    val author: String? = null
-)

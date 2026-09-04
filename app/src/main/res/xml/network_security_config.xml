@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 主配置（release 生效）：全局禁止明文流量，仅允许 HTTPS。
-     debug 构建有独立的宽松覆盖（app/src/debug/res/xml/），支持模拟器/局域网 http 联调。 -->
+     debug 构建有独立的宽松覆盖（app/src/debug/res/xml/），支持模拟器/局域网 http 联调。
+     127.0.0.1 回环例外：真机联调时经 adb reverse 隧道访问宿主机 dev server（仅本机可达，无明文外泄面）。 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
 </network-security-config>

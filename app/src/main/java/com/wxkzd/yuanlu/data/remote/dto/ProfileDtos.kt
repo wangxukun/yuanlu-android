@@ -2,7 +2,6 @@ package com.wxkzd.yuanlu.data.remote.dto
 
 import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
-import com.wxkzd.yuanlu.domain.model.RecentHistoryItem
 import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 import kotlinx.serialization.Serializable
 
@@ -57,35 +56,6 @@ data class AchievementItemDto(
         icon = icon,
         unlocked = unlocked,
         unlockedAt = unlockedAt
-    )
-}
-
-/** GET api/user/history/recent：裸数组（后端固定返回最近 3 条） */
-@Serializable
-data class RecentHistoryItemDto(
-    val historyId: Int = 0,
-    val episodeId: String = "",
-    val title: String = "",
-    val coverUrl: String? = null,
-    val audioUrl: String? = null,
-    val progress: Int = 0,
-    val progressSeconds: Int = 0,
-    val duration: Int = 0,
-    val listenAt: String? = null,
-    val isFinished: Boolean = false,
-    val author: String? = null
-) {
-    fun toDomain() = RecentHistoryItem(
-        historyId = historyId,
-        episodeId = episodeId,
-        title = title,
-        coverUrl = coverUrl,
-        progress = progress,
-        progressSeconds = progressSeconds,
-        duration = duration,
-        listenAt = listenAt,
-        isFinished = isFinished,
-        author = author
     )
 }
 

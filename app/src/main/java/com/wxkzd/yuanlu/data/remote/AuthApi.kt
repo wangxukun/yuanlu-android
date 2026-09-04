@@ -6,7 +6,6 @@ import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
 import com.wxkzd.yuanlu.data.remote.dto.LoginResponseData
 import com.wxkzd.yuanlu.data.remote.dto.ProfileStatsDto
 import com.wxkzd.yuanlu.data.remote.dto.ProfileUpdateResponseDto
-import com.wxkzd.yuanlu.data.remote.dto.RecentHistoryItemDto
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendResponse
 import com.wxkzd.yuanlu.data.remote.dto.UserProfileDto
@@ -63,8 +62,4 @@ interface AuthApi {
     /** 裸数组：成就列表（unlocked=点亮） */
     @GET("api/user/achievements")
     suspend fun achievements(): List<AchievementItemDto>
-
-    /** 裸数组：最近收听（固定 3 条） */
-    @GET("api/user/history/recent")
-    suspend fun recentHistory(): List<RecentHistoryItemDto>
 }

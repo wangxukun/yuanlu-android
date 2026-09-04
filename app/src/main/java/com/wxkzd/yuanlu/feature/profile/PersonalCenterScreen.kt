@@ -48,7 +48,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
@@ -87,32 +86,28 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.wxkzd.yuanlu.domain.model.AchievementItem
-import com.wxkzd.yuanlu.domain.model.RecentHistoryItem
 import com.wxkzd.yuanlu.domain.model.UserProfile
 import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
-import com.wxkzd.yuanlu.ui.components.CoverImage
 import com.wxkzd.yuanlu.ui.components.ShimmerBox
 import kotlinx.coroutines.launch
 import kotlin.math.floor
 import kotlin.math.min
 
-/** 个人中心四个选项卡（对齐 Web personal-center 的 activeTab） */
+/** 个人中心选项卡（对齐 Web personal-center 的 activeTab） */
 private enum class CenterTab(val label: String) {
     JOURNEY("旅程数据"),
     ACHIEVEMENTS("里程碑"),
-    HISTORY("最近听过"),
     SECURITY("账号与安全")
 }
 
 /**
- * 个人中心页（复刻 Web /auth/personal-center）：头部用户卡 + 四选项卡
- * （旅程数据/里程碑/最近听过/账号与安全）+ 编辑资料 BottomSheet。
+ * 个人中心页（复刻 Web /auth/personal-center）：头部用户卡 + 三选项卡
+ * （旅程数据/里程碑/账号与安全）+ 编辑资料 BottomSheet。
  */
 @Composable
 fun PersonalCenterRoute(
     viewModel: UserProfileViewModel,
-    onBack: () -> Unit,
-    onOpenEpisode: (String) -> Unit
+    onBack: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -165,7 +160,6 @@ fun PersonalCenterRoute(
                 onRetry = viewModel::retry,
                 onChangeWeek = viewModel::changeWeek,
                 onOpenEdit = viewModel::openEdit,
-                onOpenEpisode = onOpenEpisode,
                 onComingSoon = { comingSoon(it) }
             )
         }
@@ -199,7 +193,6 @@ private fun PersonalCenterContent(
     onRetry: () -> Unit,
     onChangeWeek: (Int) -> Unit,
     onOpenEdit: () -> Unit,
-    onOpenEpisode: (String) -> Unit,
     onComingSoon: (String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf(CenterTab.JOURNEY) }
@@ -237,7 +230,6 @@ private fun PersonalCenterContent(
                         MilestoneRoadmapCard(state)
                         AchievementsCard(state, onComingSoon)
                     }
-                    CenterTab.HISTORY -> RecentHistoryCard(state, onOpenEpisode, onComingSoon)
                     CenterTab.SECURITY -> SecuritySection(state.profile, onComingSoon)
                 }
             }
@@ -1015,99 +1007,6 @@ private fun AchievementTile(achievement: AchievementItem, modifier: Modifier = M
                     if (unlocked) base else base.alpha(0.4f)
                 }
         )
-    }
-}
-
-// ---------- 最近听过 ----------
-
-@Composable
-private fun RecentHistoryCard(
-    state: UserProfileUiState,
-    onOpenEpisode: (String) -> Unit,
-    onComingSoon: (String) -> Unit
-) {
-    ProfileCard {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "最近播放",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = "查看全部",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { onComingSoon("完整收听历史") }
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            when {
-                state.historyLoading -> repeat(3) {
-                    ShimmerBox(
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        cornerRadius = 12.dp
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
-                state.recentHistory.isEmpty() -> Text(
-                    text = "暂无播放记录，去听听看吧！",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 20.dp)
-                )
-                else -> state.recentHistory.forEach { item ->
-                    RecentHistoryRow(item = item, onClick = { onOpenEpisode(item.episodeId) })
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecentHistoryRow(item: RecentHistoryItem, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() }
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        CoverImage(
-            url = item.coverUrl,
-            contentDescription = item.title,
-            modifier = Modifier.size(width = 64.dp, height = 36.dp),
-            cornerRadius = 8.dp
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LinearProgressIndicator(
-                    progress = { (item.progress / 100f).coerceIn(0f, 1f) },
-                    modifier = Modifier.weight(1f).height(4.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (item.isFinished) "已听完" else "${item.progress}%",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 

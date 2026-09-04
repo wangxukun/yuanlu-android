@@ -3,7 +3,6 @@ package com.wxkzd.yuanlu.feature.profile
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
-import com.wxkzd.yuanlu.domain.model.RecentHistoryItem
 import com.wxkzd.yuanlu.domain.model.UserProfile
 import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
@@ -56,16 +55,13 @@ class UserProfileViewModelTest {
     // ---------- 加载 ----------
 
     @Test
-    fun `load populates profile stats achievements and history`() = runTest(dispatcher) {
+    fun `load populates profile stats and achievements`() = runTest(dispatcher) {
         val repository = FakeUserAuthRepository(
             profile = profile(),
             stats = ProfileStats(totalHours = 12.3, streakDays = 4, wordsLearned = 66),
             achievements = listOf(
                 AchievementItem("k1", "起步", "desc", "🚩", unlocked = true),
                 AchievementItem("k2", "小径", "desc", "🌲")
-            ),
-            history = listOf(
-                RecentHistoryItem(historyId = 1, episodeId = "e1", title = "第一集")
             )
         )
         val viewModel = UserProfileViewModel(repository)
@@ -78,11 +74,9 @@ class UserProfileViewModelTest {
         assertEquals(4, state.stats?.streakDays)
         assertEquals(66, state.stats?.wordsLearned)
         assertEquals(2, state.achievements.size)
-        assertEquals(1, state.recentHistory.size)
         assertFalse(state.isLoading)
         assertFalse(state.statsLoading)
         assertFalse(state.achievementsLoading)
-        assertFalse(state.historyLoading)
     }
 
     @Test
@@ -268,13 +262,12 @@ class UserProfileViewModelTest {
     }
 }
 
-/** 个人中心用 Fake：覆盖 profile/stats/activity/achievements/history 与 updateProfile */
+/** 个人中心用 Fake：覆盖 profile/stats/activity/achievements 与 updateProfile */
 private class FakeUserAuthRepository(
     private val profile: UserProfile = UserProfile(userid = "u1", nickname = "远路客"),
     private val updatedProfile: UserProfile? = null,
     private val stats: ProfileStats = ProfileStats(),
     private val achievements: List<AchievementItem> = emptyList(),
-    private val history: List<RecentHistoryItem> = emptyList(),
     private val activity: List<WeeklyActivityItem> = List(7) { WeeklyActivityItem("周${it + 1}", it * 10) },
     var profileError: String? = null,
     var updateError: Result.Error? = null
@@ -323,5 +316,4 @@ private class FakeUserAuthRepository(
         return Result.Success(activity)
     }
     override suspend fun getAchievements(): Result<List<AchievementItem>> = Result.Success(achievements)
-    override suspend fun getRecentHistory(): Result<List<RecentHistoryItem>> = Result.Success(history)
 }

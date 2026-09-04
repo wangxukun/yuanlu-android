@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.AchievementItem
-import com.wxkzd.yuanlu.domain.model.RecentHistoryItem
 import com.wxkzd.yuanlu.domain.model.UserProfile
 import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
@@ -21,7 +20,7 @@ import javax.inject.Inject
 enum class EditProfileTab { PROFILE, GOALS }
 
 /**
- * 个人中心状态：统管用户信息、旅程数据、里程碑、最近听过与编辑资料表单。
+ * 个人中心状态：统管用户信息、旅程数据、里程碑与编辑资料表单。
  * Activity 作用域（Navigation 根创建），供个人中心页与「我的」Tab 共享——
  * 保存成功后 profileRevision 自增，外层 Tab 监听后刷新自己的用户卡。
  */
@@ -41,9 +40,6 @@ data class UserProfileUiState(
     // ---- 里程碑 ----
     val achievements: List<AchievementItem> = emptyList(),
     val achievementsLoading: Boolean = true,
-    // ---- 最近听过 ----
-    val recentHistory: List<RecentHistoryItem> = emptyList(),
-    val historyLoading: Boolean = true,
     // ---- 编辑资料弹窗 ----
     val isEditOpen: Boolean = false,
     val editTab: EditProfileTab = EditProfileTab.PROFILE,
@@ -83,7 +79,6 @@ class UserProfileViewModel @Inject constructor(
         loadStats()
         loadActivity(_uiState.value.weekOffset)
         loadAchievements()
-        loadHistory()
     }
 
     fun retry() = load()
@@ -161,23 +156,6 @@ class UserProfileViewModel @Inject constructor(
                 }
                 Result.NetworkError -> _uiState.update {
                     it.copy(achievementsLoading = false, achievements = emptyList())
-                }
-            }
-        }
-    }
-
-    private fun loadHistory() {
-        _uiState.update { it.copy(historyLoading = true) }
-        viewModelScope.launch {
-            when (val result = authRepository.getRecentHistory()) {
-                is Result.Success -> _uiState.update {
-                    it.copy(historyLoading = false, recentHistory = result.data)
-                }
-                is Result.Error -> _uiState.update {
-                    it.copy(historyLoading = false, recentHistory = emptyList())
-                }
-                Result.NetworkError -> _uiState.update {
-                    it.copy(historyLoading = false, recentHistory = emptyList())
                 }
             }
         }

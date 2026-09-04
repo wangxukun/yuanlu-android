@@ -3,7 +3,6 @@ package com.wxkzd.yuanlu.domain.repository
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
-import com.wxkzd.yuanlu.domain.model.RecentHistoryItem
 import com.wxkzd.yuanlu.domain.model.UserProfile
 import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 
@@ -47,7 +46,4 @@ interface AuthRepository {
 
     /** 成就列表 */
     suspend fun getAchievements(): Result<List<AchievementItem>>
-
-    /** 最近收听历史（固定 3 条） */
-    suspend fun getRecentHistory(): Result<List<RecentHistoryItem>>
 }

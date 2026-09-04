@@ -7,7 +7,6 @@ import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendRequest
 import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
-import com.wxkzd.yuanlu.domain.model.RecentHistoryItem
 import com.wxkzd.yuanlu.domain.model.UserProfile
 import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
@@ -207,20 +206,6 @@ class AuthRepositoryImpl @Inject constructor(
                 Result.NetworkError
             } catch (e: Exception) {
                 Result.Error(600, e.message ?: "成就加载失败")
-            }
-        }
-    }
-
-    override suspend fun getRecentHistory(): Result<List<RecentHistoryItem>> {
-        return withContext(Dispatchers.IO) {
-            try {
-                Result.Success(api.recentHistory().map { it.toDomain() })
-            } catch (e: HttpException) {
-                Result.Error(e.code(), e.errorMessage())
-            } catch (e: IOException) {
-                Result.NetworkError
-            } catch (e: Exception) {
-                Result.Error(600, e.message ?: "收听历史加载失败")
             }
         }
     }

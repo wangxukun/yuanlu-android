@@ -143,12 +143,11 @@ private fun AppNavHost(
                         onOpenPersonalCenter = { open(PersonalCenterNav) }
                     )
                 }
-                // 个人中心：复刻 Web /auth/personal-center（旅程数据/里程碑/最近听过/账号与安全）
+                // 个人中心：复刻 Web /auth/personal-center（旅程数据/里程碑/账号与安全）
                 entry<PersonalCenterNav> {
                     PersonalCenterRoute(
                         viewModel = userProfileViewModel,
-                        onBack = { back() },
-                        onOpenEpisode = { open(PlayerNav(it)) }
+                        onBack = { back() }
                     )
                 }
                 entry<PodcastDetailNav> { key ->
