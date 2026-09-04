@@ -39,6 +39,8 @@ import com.wxkzd.yuanlu.feature.player.MiniPlayerBar
 import com.wxkzd.yuanlu.feature.player.PlayerRoute
 import com.wxkzd.yuanlu.feature.player.PlayerShellViewModel
 import com.wxkzd.yuanlu.feature.podcast.PodcastDetailRoute
+import com.wxkzd.yuanlu.feature.profile.PersonalCenterRoute
+import com.wxkzd.yuanlu.feature.profile.UserProfileViewModel
 import com.wxkzd.yuanlu.feature.vocabulary.VocabularyReviewScreen
 import com.wxkzd.yuanlu.feature.vocabulary.VocabularyViewModel
 import com.wxkzd.yuanlu.theme.ThemeMode
@@ -95,6 +97,10 @@ private fun AppNavHost(
     val vocabularyViewModel: VocabularyViewModel = hiltViewModel()
     val vocabularyState by vocabularyViewModel.uiState.collectAsStateWithLifecycle()
 
+    // 个人中心 VM（Activity 作用域）：个人中心页持有全部数据，
+    // 「我的」Tab 观察其 profileRevision 在资料保存后刷新用户卡
+    val userProfileViewModel: UserProfileViewModel = hiltViewModel()
+
     var isFullScreenPlayerOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(hasTrack) {
         // 无在播音轨时兜底收起全屏播放器
@@ -132,7 +138,17 @@ private fun AppNavHost(
                         onViewAllChannels = { open(ChannelListNav) },
                         themeMode = themeMode,
                         onThemeModeChange = onThemeModeChange,
-                        vocabularyViewModel = vocabularyViewModel
+                        vocabularyViewModel = vocabularyViewModel,
+                        userProfileViewModel = userProfileViewModel,
+                        onOpenPersonalCenter = { open(PersonalCenterNav) }
+                    )
+                }
+                // 个人中心：复刻 Web /auth/personal-center（旅程数据/里程碑/最近听过/账号与安全）
+                entry<PersonalCenterNav> {
+                    PersonalCenterRoute(
+                        viewModel = userProfileViewModel,
+                        onBack = { back() },
+                        onOpenEpisode = { open(PlayerNav(it)) }
                     )
                 }
                 entry<PodcastDetailNav> { key ->

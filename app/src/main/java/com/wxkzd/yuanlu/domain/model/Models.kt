@@ -163,15 +163,59 @@ data class Comment(
     val replies: List<Comment> = emptyList()
 )
 
-/** 当前登录用户资料（GET api/user/profile） */
+/** 当前登录用户资料（GET api/user/profile，学习目标字段对齐 Web 编辑资料弹窗） */
 data class UserProfile(
     val userid: String,
     val nickname: String? = null,
     val avatarUrl: String? = null,
+    val avatarFileName: String? = null,
     val bio: String? = null,
     val learnLevel: String? = null,
     val email: String? = null,
     val phone: String? = null,
     val role: String? = null,   // USER | PREMIUM | ADMIN
-    val createAt: String? = null
+    val createAt: String? = null,
+    // ---- 学习目标（个人中心编辑资料） ----
+    val dailyStudyGoalMins: Int? = null,
+    val weeklyListeningGoalHours: Int? = null,
+    val weeklyWordsGoal: Int? = null
+)
+
+/** 个人中心旅程概览统计（GET api/user/stats/overview，裸对象） */
+data class ProfileStats(
+    val totalHours: Double = 0.0,
+    val streakDays: Int = 0,
+    val wordsLearned: Int = 0,
+    val speechEvalCount: Int = 0,
+    val speechHighScoreCount: Int = 0
+)
+
+/** 每周活动图表的每日数据项（GET api/user/stats/weekly-activity） */
+data class WeeklyActivityItem(
+    val day: String = "",      // 星期几中文简称（周一…周日）
+    val minutes: Int = 0
+)
+
+/** 成就项（GET api/user/achievements，裸数组） */
+data class AchievementItem(
+    val key: String,
+    val name: String,
+    val description: String,
+    val icon: String,          // emoji 图标，直接以文本渲染
+    val unlocked: Boolean = false,
+    val unlockedAt: String? = null
+)
+
+/** 最近收听历史条目（GET api/user/history/recent，最近 3 条） */
+data class RecentHistoryItem(
+    val historyId: Int,
+    val episodeId: String,
+    val title: String,
+    val coverUrl: String? = null,
+    val progress: Int = 0,          // 0-100
+    val progressSeconds: Int = 0,
+    val duration: Int = 0,
+    val listenAt: String? = null,
+    val isFinished: Boolean = false,
+    val author: String? = null
 )

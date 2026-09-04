@@ -64,11 +64,15 @@ data class UserProfileDto(
         userid = user?.userid ?: userid,
         nickname = nickname,
         avatarUrl = avatarUrl,
+        avatarFileName = avatarFileName,
         bio = bio,
         learnLevel = learnLevel,
         email = user?.email,
         phone = user?.phone,
         role = user?.role,
-        createAt = user?.createAt
+        createAt = user?.createAt,
+        dailyStudyGoalMins = dailyStudyGoalMins,
+        weeklyListeningGoalHours = weeklyListeningGoalHours,
+        weeklyWordsGoal = weeklyWordsGoal
     )
 }

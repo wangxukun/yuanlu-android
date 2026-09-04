@@ -22,3 +22,6 @@ import kotlinx.serialization.Serializable
 ) : NavKey
 
 @Serializable data object ChannelListNav : NavKey
+
+/** 个人中心（旅程数据/里程碑/最近听过/账号与安全），需登录 */
+@Serializable data object PersonalCenterNav : NavKey

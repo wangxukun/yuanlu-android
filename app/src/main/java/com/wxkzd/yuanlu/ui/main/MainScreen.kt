@@ -28,6 +28,7 @@ import com.wxkzd.yuanlu.feature.home.HomeScreen
 import com.wxkzd.yuanlu.feature.home.HomeViewModel
 import com.wxkzd.yuanlu.feature.profile.ProfileScreen
 import com.wxkzd.yuanlu.feature.profile.ProfileViewModel
+import com.wxkzd.yuanlu.feature.profile.UserProfileViewModel
 import com.wxkzd.yuanlu.feature.vocabulary.VocabularyScreen
 import com.wxkzd.yuanlu.feature.vocabulary.VocabularyViewModel
 import com.wxkzd.yuanlu.theme.ThemeMode
@@ -57,7 +58,10 @@ fun MainScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     // 生词本 VM 由 AppNavHost 以 Activity 作用域创建（与播放壳同款），
     // 列表页与全局复习层共享同一状态源
-    vocabularyViewModel: VocabularyViewModel
+    vocabularyViewModel: VocabularyViewModel,
+    // 个人中心 VM（Activity 作用域）：编辑资料保存后「我的」Tab 借 profileRevision 刷新用户卡
+    userProfileViewModel: UserProfileViewModel,
+    onOpenPersonalCenter: () -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     // 全屏卡片复习打开时隐藏底部导航（复习层挂在全局根层级，盖住迷你播放条）
@@ -122,7 +126,9 @@ fun MainScreen(
                     isLoggedIn = isLoggedIn,
                     onLogin = onLogin,
                     themeMode = themeMode,
-                    onThemeModeChange = onThemeModeChange
+                    onThemeModeChange = onThemeModeChange,
+                    userProfileViewModel = userProfileViewModel,
+                    onOpenPersonalCenter = onOpenPersonalCenter
                 )
             }
         }

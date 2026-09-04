@@ -5,7 +5,11 @@ import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.AuthApi
 import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendRequest
+import com.wxkzd.yuanlu.domain.model.AchievementItem
+import com.wxkzd.yuanlu.domain.model.ProfileStats
+import com.wxkzd.yuanlu.domain.model.RecentHistoryItem
 import com.wxkzd.yuanlu.domain.model.UserProfile
+import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import com.wxkzd.yuanlu.domain.repository.SmsSendStatus
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +19,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
@@ -113,6 +120,107 @@ class AuthRepositoryImpl @Inject constructor(
                 Result.NetworkError
             } catch (e: Exception) {
                 Result.Error(600, e.message ?: "加载用户信息失败")
+            }
+        }
+    }
+
+    override suspend fun updateProfile(
+        nickname: String,
+        bio: String,
+        learnLevel: String,
+        dailyStudyGoalMins: Int,
+        weeklyListeningGoalHours: Int,
+        weeklyWordsGoal: Int,
+        avatarJpeg: ByteArray?
+    ): Result<UserProfile> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 与 Web EditProfileModal 的 FormData 字段一一同构；文本分片用 text/plain
+                fun text(value: String) = value.toRequestBody("text/plain".toMediaType())
+                val avatarPart = avatarJpeg?.let { bytes ->
+                    MultipartBody.Part.createFormData(
+                        name = "avatar",
+                        filename = "avatar.jpg",
+                        body = bytes.toRequestBody("image/jpeg".toMediaType())
+                    )
+                }
+                val response = api.updateProfile(
+                    nickname = text(nickname),
+                    bio = text(bio),
+                    learnLevel = text(learnLevel),
+                    dailyStudyGoalMins = text(dailyStudyGoalMins.toString()),
+                    weeklyListeningGoalHours = text(weeklyListeningGoalHours.toString()),
+                    weeklyWordsGoal = text(weeklyWordsGoal.toString()),
+                    avatar = avatarPart
+                )
+                val updated = response.data
+                if (response.success && updated != null) {
+                    Result.Success(updated.toDomain())
+                } else {
+                    Result.Error(400, response.error ?: "更新失败，请重试")
+                }
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "更新失败，请重试")
+            }
+        }
+    }
+
+    override suspend fun getStatsOverview(): Result<ProfileStats> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Result.Success(api.statsOverview().toDomain())
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "统计数据加载失败")
+            }
+        }
+    }
+
+    override suspend fun getWeeklyActivity(weekOffset: Int): Result<List<WeeklyActivityItem>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Result.Success(api.weeklyActivity(weekOffset).weeklyActivity.map { it.toDomain() })
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "活动数据加载失败")
+            }
+        }
+    }
+
+    override suspend fun getAchievements(): Result<List<AchievementItem>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Result.Success(api.achievements().map { it.toDomain() })
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "成就加载失败")
+            }
+        }
+    }
+
+    override suspend fun getRecentHistory(): Result<List<RecentHistoryItem>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Result.Success(api.recentHistory().map { it.toDomain() })
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "收听历史加载失败")
             }
         }
     }

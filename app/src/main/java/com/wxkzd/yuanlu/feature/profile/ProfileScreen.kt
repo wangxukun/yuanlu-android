@@ -67,9 +67,13 @@ fun ProfileScreen(
     isLoggedIn: Boolean,
     onLogin: () -> Unit,
     themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onThemeModeChange: (ThemeMode) -> Unit,
+    // 个人中心 VM（Activity 作用域）：编辑资料保存后借 profileRevision 刷新本页用户卡
+    userProfileViewModel: UserProfileViewModel,
+    onOpenPersonalCenter: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val userCenterState by userProfileViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showThemeDialog by remember { mutableStateOf(false) }
@@ -80,6 +84,11 @@ fun ProfileScreen(
 
     LaunchedEffect(isLoggedIn) {
         viewModel.onAuthStateChanged(isLoggedIn)
+    }
+
+    // 个人中心保存资料后（revision 自增）刷新本页用户卡（对齐 Web updateSession 后 fetchProfile）
+    LaunchedEffect(userCenterState.profileRevision) {
+        if (userCenterState.profileRevision > 0 && isLoggedIn) viewModel.load()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -115,7 +124,7 @@ fun ProfileScreen(
             // ---- 账户与系统设置 ----
             MenuCard(title = "账户与系统设置") {
                 if (isLoggedIn) {
-                    MenuRow("个人中心", Icons.Filled.Person, MaterialTheme.colorScheme.primary) { comingSoon("个人中心") }
+                    MenuRow("个人中心", Icons.Filled.Person, MaterialTheme.colorScheme.primary) { onOpenPersonalCenter() }
                     MenuRow("我的订阅", Icons.Filled.CreditCard, MaterialTheme.colorScheme.secondary) { comingSoon("我的订阅") }
                     if (uiState.profile?.role == "ADMIN") {
                         MenuRow("控制台", Icons.Filled.Computer, MaterialTheme.colorScheme.error) { comingSoon("控制台") }

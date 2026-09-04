@@ -1,7 +1,11 @@
 package com.wxkzd.yuanlu.feature.auth
 
 import com.wxkzd.yuanlu.core.network.Result
+import com.wxkzd.yuanlu.domain.model.AchievementItem
+import com.wxkzd.yuanlu.domain.model.ProfileStats
+import com.wxkzd.yuanlu.domain.model.RecentHistoryItem
 import com.wxkzd.yuanlu.domain.model.UserProfile
+import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import com.wxkzd.yuanlu.domain.repository.SmsSendStatus
 import kotlinx.coroutines.Dispatchers
@@ -105,4 +109,21 @@ private class FakeAuthRepository(
     }
     override suspend fun getProfile(): Result<UserProfile> =
         Result.Success(UserProfile(userid = "u1", nickname = "Tester"))
+    override suspend fun updateProfile(
+        nickname: String,
+        bio: String,
+        learnLevel: String,
+        dailyStudyGoalMins: Int,
+        weeklyListeningGoalHours: Int,
+        weeklyWordsGoal: Int,
+        avatarJpeg: ByteArray?
+    ): Result<UserProfile> = Result.Error(600, "not implemented")
+    override suspend fun getStatsOverview(): Result<ProfileStats> =
+        Result.Error(600, "not implemented")
+    override suspend fun getWeeklyActivity(weekOffset: Int): Result<List<WeeklyActivityItem>> =
+        Result.Error(600, "not implemented")
+    override suspend fun getAchievements(): Result<List<AchievementItem>> =
+        Result.Error(600, "not implemented")
+    override suspend fun getRecentHistory(): Result<List<RecentHistoryItem>> =
+        Result.Error(600, "not implemented")
 }
