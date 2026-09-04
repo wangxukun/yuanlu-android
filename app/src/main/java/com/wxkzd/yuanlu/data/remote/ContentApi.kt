@@ -17,6 +17,13 @@ import com.wxkzd.yuanlu.data.remote.dto.TagDto
 import com.wxkzd.yuanlu.data.remote.dto.TranslateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyAllResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyDeleteRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyDeleteResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyReviewRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyReviewResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyStatusRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyStatusResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyWordsResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.YoudaoResponseDto
 import kotlinx.serialization.json.JsonElement
@@ -109,6 +116,24 @@ interface ContentApi {
     /** 信封：data = 已保存单词小写列表（用于查询弹层已保存态） */
     @GET("api/vocabulary/words")
     suspend fun vocabularyWords(): VocabularyWordsResponseDto
+
+    // ---------- 生词本（列表管理与卡片复习） ----------
+
+    /** 信封：data = 全量生词（含词典富数据与剧集名），需登录 */
+    @GET("api/vocabulary/all")
+    suspend fun vocabularyAll(): VocabularyAllResponseDto
+
+    /** 裸 { success }；404=不存在 403=无权，需登录 */
+    @POST("api/vocabulary/delete")
+    suspend fun deleteVocabulary(@Body body: VocabularyDeleteRequestDto): VocabularyDeleteResponseDto
+
+    /** 信封：data = { vocabularyid, nextReviewAt, proficiency, daysAdded }（SRS 复习打卡） */
+    @POST("api/vocabulary/review")
+    suspend fun submitVocabularyReview(@Body body: VocabularyReviewRequestDto): VocabularyReviewResponseDto
+
+    /** 信封：data = { vocabularyid, status }（LEARNING <-> MASTERED） */
+    @POST("api/vocabulary/status")
+    suspend fun updateVocabularyStatus(@Body body: VocabularyStatusRequestDto): VocabularyStatusResponseDto
 
     // ---------- 播放进度上报 ----------
 

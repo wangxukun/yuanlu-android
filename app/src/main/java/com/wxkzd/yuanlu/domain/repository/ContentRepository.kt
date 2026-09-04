@@ -10,6 +10,8 @@ import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
 import com.wxkzd.yuanlu.domain.model.Tag
+import com.wxkzd.yuanlu.domain.model.VocabularyItem
+import com.wxkzd.yuanlu.domain.model.VocabularyReviewOutcome
 
 interface ContentRepository {
 
@@ -75,6 +77,23 @@ interface ContentRepository {
 
     /** 已保存单词集合（小写；未登录返回空集语义由调用方处理） */
     suspend fun getVocabularyWords(): Result<Set<String>>
+
+    // ---------- 生词本（列表管理与卡片复习） ----------
+
+    /** 全量生词（GET api/vocabulary/all，含词典富数据/剧集名/SRS 状态），需登录 */
+    suspend fun getAllVocabulary(): Result<List<VocabularyItem>>
+
+    /** 彻底删除生词（POST api/vocabulary/delete）；404=不存在 403=无权 */
+    suspend fun deleteVocabulary(vocabularyid: Int): Result<Unit>
+
+    /**
+     * 提交一次复习打卡（POST api/vocabulary/review）。
+     * quality: 0=忘记 1=模糊 2=认识 3=简单；返回 SRS 更新后的熟练度与下次复习时间。
+     */
+    suspend fun submitVocabularyReview(vocabularyid: Int, quality: Int): Result<VocabularyReviewOutcome>
+
+    /** 切换生词状态（POST api/vocabulary/status）：mastered=true 标记已掌握，false 放回学习 */
+    suspend fun updateVocabularyStatus(vocabularyid: Int, mastered: Boolean): Result<Unit>
 
     // ---------- 播放进度上报 ----------
 

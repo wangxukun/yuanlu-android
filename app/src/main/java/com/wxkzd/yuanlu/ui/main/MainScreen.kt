@@ -9,11 +9,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wxkzd.yuanlu.feature.auth.LoginGateScreen
 import com.wxkzd.yuanlu.feature.discover.DiscoverScreen
 import com.wxkzd.yuanlu.feature.discover.DiscoverViewModel
@@ -29,6 +28,8 @@ import com.wxkzd.yuanlu.feature.home.HomeScreen
 import com.wxkzd.yuanlu.feature.home.HomeViewModel
 import com.wxkzd.yuanlu.feature.profile.ProfileScreen
 import com.wxkzd.yuanlu.feature.profile.ProfileViewModel
+import com.wxkzd.yuanlu.feature.vocabulary.VocabularyScreen
+import com.wxkzd.yuanlu.feature.vocabulary.VocabularyViewModel
 import com.wxkzd.yuanlu.theme.ThemeMode
 
 private data class TabItem(
@@ -53,20 +54,27 @@ fun MainScreen(
     onOpenEpisode: (String) -> Unit,
     onViewAllChannels: () -> Unit,
     themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onThemeModeChange: (ThemeMode) -> Unit,
+    // 生词本 VM 由 AppNavHost 以 Activity 作用域创建（与播放壳同款），
+    // 列表页与全局复习层共享同一状态源
+    vocabularyViewModel: VocabularyViewModel
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    // 全屏卡片复习打开时隐藏底部导航（复习层挂在全局根层级，盖住迷你播放条）
+    val vocabularyState by vocabularyViewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                TABS.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) }
-                    )
+            if (!vocabularyState.isReviewOpen) {
+                NavigationBar {
+                    TABS.forEachIndexed { index, tab ->
+                        NavigationBarItem(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                            label = { Text(tab.label) }
+                        )
+                    }
                 }
             }
         }
@@ -96,21 +104,10 @@ fun MainScreen(
                     onOpenChannel = onOpenChannel,
                     onViewAllChannels = onViewAllChannels
                 )
-                // 生词本：M5 实现；游客引导，登录后占位
+                // 生词本：列表 + 全屏卡片复习（游客引导，对齐 Web /library/vocabulary）
                 2 -> {
                     if (isLoggedIn) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.background
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                                Text(
-                                    text = "生词本即将上线",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
+                        VocabularyScreen(viewModel = vocabularyViewModel)
                     } else {
                         LoginGateScreen(
                             onLogin = onLogin,

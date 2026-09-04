@@ -5,6 +5,9 @@ import com.wxkzd.yuanlu.data.remote.ContentApi
 import com.wxkzd.yuanlu.data.remote.dto.CommentDto
 import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyDeleteRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyReviewRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.VocabularyStatusRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.ProgressUpdateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.TranslateRequestDto
@@ -18,6 +21,8 @@ import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
 import com.wxkzd.yuanlu.domain.model.Tag
+import com.wxkzd.yuanlu.domain.model.VocabularyItem
+import com.wxkzd.yuanlu.domain.model.VocabularyReviewOutcome
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -220,6 +225,121 @@ class ContentRepositoryImpl @Inject constructor(
                 Result.NetworkError
             } catch (e: HttpException) {
                 Result.Error(e.code(), if (e.code() == 401) "请先登录" else "生词本加载失败")
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "Unexpected error")
+            }
+        }
+
+    // ---------- 生词本（列表管理与卡片复习） ----------
+
+    override suspend fun getAllVocabulary(): Result<List<VocabularyItem>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.vocabularyAll()
+                if (response.success) {
+                    Result.Success(response.data.map { it.toDomain() })
+                } else {
+                    Result.Error(600, response.message ?: "生词本加载失败")
+                }
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: HttpException) {
+                val message = when (e.code()) {
+                    401 -> "请先登录"
+                    else -> "生词本加载失败（${e.code()}）"
+                }
+                Result.Error(e.code(), message)
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "Unexpected error")
+            }
+        }
+
+    override suspend fun deleteVocabulary(vocabularyid: Int): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.deleteVocabulary(VocabularyDeleteRequestDto(vocabularyid))
+                if (response.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(600, response.message ?: "删除失败")
+                }
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: HttpException) {
+                val message = when (e.code()) {
+                    404 -> "未找到该生词记录"
+                    403 -> "无权删除该记录"
+                    401 -> "请先登录"
+                    else -> "删除失败（${e.code()}）"
+                }
+                Result.Error(e.code(), message)
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "Unexpected error")
+            }
+        }
+
+    override suspend fun submitVocabularyReview(
+        vocabularyid: Int,
+        quality: Int
+    ): Result<VocabularyReviewOutcome> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.submitVocabularyReview(
+                    VocabularyReviewRequestDto(vocabularyid, quality)
+                )
+                val data = response.data
+                if (response.success && data != null) {
+                    Result.Success(
+                        VocabularyReviewOutcome(
+                            vocabularyid = data.vocabularyid,
+                            proficiency = data.proficiency,
+                            nextReviewAt = data.nextReviewAt,
+                            daysAdded = data.daysAdded
+                        )
+                    )
+                } else {
+                    Result.Error(600, response.message ?: "复习进度保存失败")
+                }
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: HttpException) {
+                val message = when (e.code()) {
+                    404 -> "未找到该生词记录"
+                    403 -> "无权操作该生词"
+                    401 -> "请先登录"
+                    else -> "复习进度保存失败（${e.code()}）"
+                }
+                Result.Error(e.code(), message)
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "Unexpected error")
+            }
+        }
+
+    override suspend fun updateVocabularyStatus(
+        vocabularyid: Int,
+        mastered: Boolean
+    ): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            try {
+                val status = if (mastered) "MASTERED" else "LEARNING"
+                val response = api.updateVocabularyStatus(
+                    VocabularyStatusRequestDto(vocabularyid, status)
+                )
+                if (response.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(600, response.message ?: "状态更新失败")
+                }
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: HttpException) {
+                val message = when (e.code()) {
+                    404 -> "未找到该生词记录"
+                    403 -> "无权操作该生词"
+                    401 -> "请先登录"
+                    else -> "状态更新失败（${e.code()}）"
+                }
+                Result.Error(e.code(), message)
             } catch (e: Exception) {
                 Result.Error(600, e.message ?: "Unexpected error")
             }

@@ -183,6 +183,22 @@ private class FakeContentRepository(
     override suspend fun getVocabularyWords(): Result<Set<String>> =
         com.wxkzd.yuanlu.core.network.Result.Success(emptySet())
 
+    // 生词本（列表与复习）：本测试不涉及
+    override suspend fun getAllVocabulary(): Result<List<com.wxkzd.yuanlu.domain.model.VocabularyItem>> =
+        com.wxkzd.yuanlu.core.network.Result.Success(emptyList())
+
+    override suspend fun deleteVocabulary(vocabularyid: Int): Result<Unit> =
+        com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+
+    override suspend fun submitVocabularyReview(
+        vocabularyid: Int,
+        quality: Int
+    ): Result<com.wxkzd.yuanlu.domain.model.VocabularyReviewOutcome> =
+        com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+
+    override suspend fun updateVocabularyStatus(vocabularyid: Int, mastered: Boolean): Result<Unit> =
+        com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+
     override suspend fun updateEpisodeProgress(
         episodeid: String,
         progressSeconds: Float,

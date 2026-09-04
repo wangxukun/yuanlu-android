@@ -39,6 +39,8 @@ import com.wxkzd.yuanlu.feature.player.MiniPlayerBar
 import com.wxkzd.yuanlu.feature.player.PlayerRoute
 import com.wxkzd.yuanlu.feature.player.PlayerShellViewModel
 import com.wxkzd.yuanlu.feature.podcast.PodcastDetailRoute
+import com.wxkzd.yuanlu.feature.vocabulary.VocabularyReviewScreen
+import com.wxkzd.yuanlu.feature.vocabulary.VocabularyViewModel
 import com.wxkzd.yuanlu.theme.ThemeMode
 import com.wxkzd.yuanlu.ui.main.MainScreen
 
@@ -89,6 +91,10 @@ private fun AppNavHost(
     val showMiniPlayer by shellViewModel.showMiniPlayer.collectAsStateWithLifecycle()
     val hasTrack = playerState.currentEpisode != null
 
+    // 生词本 VM（Activity 作用域）：Tab 列表页与全局复习层共享同一状态源
+    val vocabularyViewModel: VocabularyViewModel = hiltViewModel()
+    val vocabularyState by vocabularyViewModel.uiState.collectAsStateWithLifecycle()
+
     var isFullScreenPlayerOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(hasTrack) {
         // 无在播音轨时兜底收起全屏播放器
@@ -125,7 +131,8 @@ private fun AppNavHost(
                         onOpenEpisode = { open(PlayerNav(it)) },
                         onViewAllChannels = { open(ChannelListNav) },
                         themeMode = themeMode,
-                        onThemeModeChange = onThemeModeChange
+                        onThemeModeChange = onThemeModeChange,
+                        vocabularyViewModel = vocabularyViewModel
                     )
                 }
                 entry<PodcastDetailNav> { key ->
@@ -224,6 +231,24 @@ private fun AppNavHost(
                 onToggleLoopMode = shellViewModel::toggleLoopMode,
                 onApplySleepConfig = shellViewModel::applySleepConfig,
                 onCancelSleepTimer = shellViewModel::cancelSleepTimer
+            )
+        }
+
+        // ---- 全屏卡片复习层：挂在迷你条/全屏播放器之上（复刻 Web ReviewModal 全屏形态） ----
+        AnimatedVisibility(
+            visible = vocabularyState.isReviewOpen,
+            enter = fadeIn(tween(220)),
+            exit = fadeOut(tween(180)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            VocabularyReviewScreen(
+                state = vocabularyState,
+                onFlip = vocabularyViewModel::flipCard,
+                onSubmit = vocabularyViewModel::submitReview,
+                onPrevCard = vocabularyViewModel::goToPrevCard,
+                onNextCard = vocabularyViewModel::goToNextCard,
+                onClose = vocabularyViewModel::closeReview,
+                onRetry = vocabularyViewModel::retryForgotten
             )
         }
     }

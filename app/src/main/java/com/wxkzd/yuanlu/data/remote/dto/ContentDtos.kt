@@ -319,6 +319,109 @@ data class VocabularyWordsResponseDto(
     val message: String? = null
 )
 
+// ---------- 生词本（列表管理与卡片复习，对齐 Web /library/vocabulary） ----------
+
+/** GET /api/vocabulary/all：信封 { success, data: VocabularyItemDto[] }（需登录） */
+@Serializable
+data class VocabularyAllResponseDto(
+    val success: Boolean = false,
+    val data: List<VocabularyItemDto> = emptyList(),
+    val message: String? = null
+)
+
+/** 生词条目：字典段 + SRS 状态（proficiency/status/nextReviewAt）+ 词典富数据 dictData */
+@Serializable
+data class VocabularyItemDto(
+    val vocabularyid: Int = 0,
+    val word: String = "",
+    val definition: String? = null,
+    val translation: String? = null,
+    val contextSentence: String? = null,
+    val proficiency: Int = 0,
+    val status: String = "LEARNING",
+    val nextReviewAt: String? = null,
+    val addedDate: String? = null,
+    val speakUrl: String? = null,
+    val webUrl: String? = null,
+    val timestamp: Int? = null,
+    val episodeid: String? = null,
+    val episodeTitle: String? = null,
+    val dictData: DictEntryDto? = null
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.VocabularyItem(
+        vocabularyid = vocabularyid,
+        word = word,
+        definition = definition?.takeIf { it.isNotBlank() },
+        translation = translation?.takeIf { it.isNotBlank() },
+        contextSentence = contextSentence?.takeIf { it.isNotBlank() },
+        proficiency = proficiency,
+        status = status,
+        nextReviewAt = nextReviewAt,
+        addedDate = addedDate,
+        speakUrl = speakUrl?.takeIf { it.isNotBlank() },
+        webUrl = webUrl?.takeIf { it.isNotBlank() },
+        timestamp = timestamp,
+        episodeid = episodeid?.takeIf { it.isNotBlank() },
+        episodeTitle = episodeTitle?.takeIf { it.isNotBlank() },
+        dictEntry = dictData?.toDomain()
+    )
+}
+
+/** POST /api/vocabulary/delete 请求体 */
+@Serializable
+data class VocabularyDeleteRequestDto(val vocabularyid: Int)
+
+/** 裸 { success } 或错误 { message }（404=不存在 403=无权） */
+@Serializable
+data class VocabularyDeleteResponseDto(
+    val success: Boolean = false,
+    val message: String? = null
+)
+
+/** POST /api/vocabulary/review 请求体（quality: 0=忘记 1=模糊 2=认识 3=简单） */
+@Serializable
+data class VocabularyReviewRequestDto(
+    val vocabularyid: Int,
+    val quality: Int
+)
+
+/** 信封 { success, message, data }：data 含 SRS 更新后的熟练度与下次复习时间 */
+@Serializable
+data class VocabularyReviewResponseDto(
+    val success: Boolean = false,
+    val message: String? = null,
+    val data: VocabularyReviewResultDto? = null
+)
+
+@Serializable
+data class VocabularyReviewResultDto(
+    val vocabularyid: Int = 0,
+    val nextReviewAt: String? = null,
+    val proficiency: Int = 0,
+    val daysAdded: Int = 0
+)
+
+/** POST /api/vocabulary/status 请求体（LEARNING <-> MASTERED） */
+@Serializable
+data class VocabularyStatusRequestDto(
+    val vocabularyid: Int,
+    val status: String
+)
+
+/** 信封 { success, message, data: { vocabularyid, status } } */
+@Serializable
+data class VocabularyStatusResponseDto(
+    val success: Boolean = false,
+    val message: String? = null,
+    val data: VocabularyStatusResultDto? = null
+)
+
+@Serializable
+data class VocabularyStatusResultDto(
+    val vocabularyid: Int = 0,
+    val status: String = "LEARNING"
+)
+
 // ---------- 播放进度上报（M4 历史联动前置） ----------
 
 /** PATCH /api/episode/{id}/progress 请求体（对齐 Web useSaveProgress） */

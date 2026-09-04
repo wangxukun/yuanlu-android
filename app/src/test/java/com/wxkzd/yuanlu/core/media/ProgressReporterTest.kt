@@ -209,4 +209,10 @@ private class RecordingRepository : ContentRepository {
     override suspend fun lookupWord(word: String): Result<DictEntry> = error("unused")
     override suspend fun addVocabulary(word: String, definition: String, contextSentence: String, translation: String, episodeid: String, timestampSec: Int, speakUrl: String): Result<Unit> = error("unused")
     override suspend fun getVocabularyWords(): Result<Set<String>> = error("unused")
+
+    // 生词本（列表与复习）：本测试不涉及
+    override suspend fun getAllVocabulary(): Result<List<com.wxkzd.yuanlu.domain.model.VocabularyItem>> = error("unused")
+    override suspend fun deleteVocabulary(vocabularyid: Int): Result<Unit> = error("unused")
+    override suspend fun submitVocabularyReview(vocabularyid: Int, quality: Int): Result<com.wxkzd.yuanlu.domain.model.VocabularyReviewOutcome> = error("unused")
+    override suspend fun updateVocabularyStatus(vocabularyid: Int, mastered: Boolean): Result<Unit> = error("unused")
 }

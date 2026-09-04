@@ -139,6 +139,14 @@
   - **PlayerController**：新增 `resume()`——仅非 `STATE_IDLE` 时 `play()`，不触碰倍速/循环模式/队列/定时关闭，既有播放控制状态零影响。
   - **发现页与首页顶部间距对齐**：`DiscoverScreen` 移除 Scaffold `innerPadding`（已含状态栏 inset）之外的**重复 `statusBarsPadding()`**（多出一整个状态栏高度），`LazyColumn` 补 `contentPadding top = 8.dp`——两页标题顶部间距统一为「Scaffold 状态栏 inset + 8dp 列表 padding + 8dp SectionHeader 内边距」。
   - **验证**：`compileDebugKotlin` 全绿；模拟器（Medium_Phone / Android 17）与真机（华为 LYA-AL00 / Android 10）安装运行无崩溃，生产 API 数据正常。⚠️ 真机教训：机上旧版为 release 签名，debug 直装报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`——用项目 keystore 构建 `assembleRelease` 覆盖安装即可（签名匹配、原有数据保留）。
+- [x] **Phase 2 - M5: 生词本（列表管理 + 全屏卡片复习，复刻 Web /library/vocabulary）** (✅ 完成 2026-09-03，两端构建全绿 + 55 单测通过)
+  - **🚨 后端补齐移动端 REST（yuanlu 仓库，3 个新路由）**：Web 生词本列表走 SSR、复习提交走 Server Action，Android 均不可达。新增 `GET api/vocabulary/all`（复用 `vocabularyService.getAllVocabulary`：Dictionary 表合并 dictData + episodeTitle + SRS 状态，日期转 ISO）、`POST api/vocabulary/review`（submitReviewAction 的 REST 等价，quality 0-3）、`POST api/vocabulary/status`（updateVocabularyStatusAction 等价，LEARNING↔MASTERED）；三者均 `requireAuth()`（Bearer 兜底），服务层错误（单词不存在/无权操作）映射 404/403。
+  - **数据层**：`VocabularyItem`/`VocabularyReviewOutcome` 域模型（含 dictEntry 富数据）；`VocabularyItemDto`（dictData 复用 DictEntryDto）+ 4 组请求/响应 DTO；ContentApi 四端点；Repository 四方法（401/403/404 中文文案映射）。
+  - **VocabularyViewModel（Activity 作用域，对齐 Web 单 Hook 设计）**：列表态（vocabulary/filterStatus/searchQuery/sortMethod/expandedId/deletingItem）+ 复习态（reviewQueue/currentIndex/isFlipped/reviewResults/reviewFinished）同源——复习打卡后原地回写列表熟练度/下次复习时间；`startReview` 入队到期未掌握词；同词重评覆盖旧结果（回滑重测）；总结页「再来一轮」重入队忘记的词。
+  - **列表页（Tab 2，替换占位）**：标题 + 三统计卡（总计/待复习/已掌握）→ 复习横幅（有到期词：primary 底「复习计划已就绪 + 开始复习」按钮；无：success「全部完成了」）→ 状态 Tab（学习中/已掌握）+ 搜索（词/释义）+ 排序 chips（复习时间/添加时间/A-Z）→ 列表卡：单词/音标 chip/释义/原句片段 + 发音喇叭（40dp 触达）+ 熟练度 5 格条 + 到期徽章；点按展开词典详情（英美音标 pill + 发音、核心释义 pos chip、原声出处高亮卡、词源记忆 chips、「标记为已掌握/重新学习」+「彻底删除」确认弹窗）。
+  - **全屏复习卡片（挂 Navigation 根层级，盖过迷你播放条；打开时隐藏底部导航）**：顶部渐变进度条（翻面计半张，口径同 Web）+ 计数 + 关闭；3D 翻转 `graphicsLayer rotationY` 600ms FastOutSlowInEasing（=Web cubic-bezier(0.4,0,0.2,1)）+ cameraDistance 16×density（≈perspective 1200px），[0,90°) 正面单词大字/点按翻面，[90,180°] 背面完整释义+英美发音+原声例句高亮+词源（可滚动）；**左右滑动切换上/下一张**（80dp 阈值，方向感知 slide+fade 过渡 + 跟手拖拽位移）；底部「显示答案」→ 翻面后 忘记/模糊/认识/简单 四档 SRS 按钮（副文案按 Leitner 阶梯 [0,1,3,7,14,30,90] 预演下次间隔，error/warning/success/info 四色）；开卡/翻面自动播一次词典发音（MediaPlayer，OSS→speakUrl→dictvoice 兜底链）；总结页（奖杯 + 四档统计 + 逐词结果 + 再来一轮/完成）。
+  - **纯逻辑抽离 `VocabularyUtils.kt`**（JVM 可测）：ReviewQuality 常量、nextIntervalLabel（间隔预演）、isDue/parseIsoMillis/formatReviewDate、filterAndSortVocabulary（过滤排序口径对齐 Web filteredList）、youdaoDictVoiceUrl、buildHighlightedContext（词边界正则 + 包含匹配兜底）。
+  - **验证**：Android `compileDebugKotlin`/`assembleDebug`/`testDebugUnitTest` 55/55（新增 `VocabularyUtilsTest` 12 例：间隔阶梯/封顶 90 天/到期判定/日期兜底/Tab 过滤/搜索词与译文命中/排序/dictvoice 编码/高亮 span）；Web `tsc --noEmit` 零错误。
 - [ ] **Phase 2 - M4及以后**: 见下方详细开发计划。
 
 ---
@@ -458,7 +466,7 @@ sealed class ApiError {
 ### M4 — 收藏 / 历史 / 学习路径（~1 周）
 - 收藏/取消、历史、学习路径 CRUD，与播放联动。
 
-### M5 — 词汇与查词（~1 周）
+### M5 — 词汇与查词（~1 周）✅
 - 词汇增删查、有道词典展示、间隔重复复习。
 
 ### M6 — 语音评测 ★（~2 周）

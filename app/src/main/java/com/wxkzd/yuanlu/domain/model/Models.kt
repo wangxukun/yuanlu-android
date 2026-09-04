@@ -117,6 +117,37 @@ data class DictEntry(
     val etymology: DictEtymology? = null
 )
 
+/**
+ * 生词本条目（对齐 Web VocabularyItem：列表展示与卡片复习共用）。
+ * status: LEARNING | MASTERED；nextReviewAt/addedDate 为 ISO 字符串；
+ * dictEntry 为 Dictionary 表合并的词典富数据（音标/发音/释义/词源）。
+ */
+data class VocabularyItem(
+    val vocabularyid: Int,
+    val word: String,
+    val definition: String? = null,
+    val translation: String? = null,
+    val contextSentence: String? = null,
+    val proficiency: Int = 0,
+    val status: String = "LEARNING",
+    val nextReviewAt: String? = null,
+    val addedDate: String? = null,
+    val speakUrl: String? = null,
+    val webUrl: String? = null,
+    val timestamp: Int? = null,
+    val episodeid: String? = null,
+    val episodeTitle: String? = null,
+    val dictEntry: DictEntry? = null
+)
+
+/** 一次复习打卡的服务端结果（POST /api/vocabulary/review） */
+data class VocabularyReviewOutcome(
+    val vocabularyid: Int,
+    val proficiency: Int,
+    val nextReviewAt: String?,
+    val daysAdded: Int
+)
+
 /** 剧集评论（树形：根评论带 replies，字段对齐 /api/comment/list） */
 data class Comment(
     val commentid: Int,
