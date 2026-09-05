@@ -105,11 +105,22 @@ object ProfileUtils {
     fun sortAchievements(items: List<com.wxkzd.yuanlu.domain.model.AchievementItem>): List<com.wxkzd.yuanlu.domain.model.AchievementItem> =
         items.sortedBy { if (it.unlocked) 0 else 1 }
 
-    /** 周活动图 Y 轴上限：最大值向上取整到 30 的倍数，最小 60（recharts 自适应的移动端等价口径） */
+    /**
+     * 周活动图 Y 轴上限：recharts 默认 5 刻度的 nice 口径——
+     * 步长在每一数量级内按 1/2/3/4/5 递进，上限 = 4 × 步长（保证 5 个整数刻度）。
+     * 如峰值 13 分钟 → 上限 16m（刻度 0/4/8/12/16），与 Web 端一致。
+     */
     fun chartYMax(minutes: List<Int>): Int {
         val max = (minutes.maxOrNull() ?: 0).coerceAtLeast(0)
-        if (max <= 60) return 60
-        return ((max + 29) / 30) * 30
+        val ladder = intArrayOf(1, 2, 3, 4, 5)
+        var decade = 1
+        while (true) {
+            for (base in ladder) {
+                val yMax = base * decade * 4
+                if (yMax >= max) return yMax
+            }
+            decade *= 10
+        }
     }
 
     /** 加入日期展示：ISO → yyyy/MM/dd（Web lib/tools formatDate）；解析失败回退"未知日期" */

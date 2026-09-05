@@ -132,13 +132,17 @@ class ProfileUtilsTest {
     // ---------- 图表刻度 ----------
 
     @Test
-    fun `chart y max rounds up to multiple of thirty with floor sixty`() {
-        assertEquals(60, ProfileUtils.chartYMax(listOf()))
-        assertEquals(60, ProfileUtils.chartYMax(listOf(0, 0)))
-        assertEquals(60, ProfileUtils.chartYMax(listOf(45)))
-        assertEquals(90, ProfileUtils.chartYMax(listOf(61)))
+    fun `chart y max picks smallest nice multiple of four like recharts`() {
+        assertEquals(4, ProfileUtils.chartYMax(listOf()))
+        assertEquals(4, ProfileUtils.chartYMax(listOf(0, 0)))
+        // Web 示例：峰值约 13 分钟 → 上限 16m（刻度 0/4/8/12/16）
+        assertEquals(16, ProfileUtils.chartYMax(listOf(13)))
+        assertEquals(16, ProfileUtils.chartYMax(listOf(4, 13, 2)))
+        assertEquals(20, ProfileUtils.chartYMax(listOf(18)))
+        assertEquals(40, ProfileUtils.chartYMax(listOf(25)))
+        assertEquals(80, ProfileUtils.chartYMax(listOf(61)))
         assertEquals(120, ProfileUtils.chartYMax(listOf(100, 30)))
-        assertEquals(150, ProfileUtils.chartYMax(listOf(121, 10)))
+        assertEquals(160, ProfileUtils.chartYMax(listOf(121, 10)))
     }
 
     // ---------- 日期 ----------

@@ -629,8 +629,9 @@ private fun CanvasChart(
     val labelStyle = TextStyle(fontSize = 10.sp, color = labelColor)
     val textMeasurer = rememberTextMeasurer()
     val yMax = ProfileUtils.chartYMax(items.map { it.minutes })
+    // 5 个整数刻度（recharts 默认 tickCount=5）：0m 底部 → yMax 顶部
     val yLabels = remember(yMax, labelStyle) {
-        listOf(yMax, yMax / 2, 0).map { textMeasurer.measure("${it}m", labelStyle) }
+        (0..4).map { step -> textMeasurer.measure("${step * (yMax / 4)}m", labelStyle) }
     }
 
     androidx.compose.foundation.Canvas(
@@ -643,27 +644,18 @@ private fun CanvasChart(
         val chartW = size.width - leftPad - rightPad
         val chartH = size.height - topPad - bottomPad
 
-        // Y 轴刻度线（0/半值/满值）+ 右侧对齐的刻度文字
+        if (items.isEmpty() || chartW <= 0f) return@Canvas
+
+        // Y 轴刻度文字：值越大位置越高（原点 0m 在最下方，对齐 Web）。
+        // Web 端已移除 CartesianGrid，这里同样只保留刻度、不画网格线。
         yLabels.forEachIndexed { index, label ->
-            val fraction = when (index) {
-                0 -> 0f
-                1 -> 0.5f
-                else -> 1f
-            }
+            val fraction = index / 4f
             val y = topPad + chartH * (1f - fraction)
-            drawLine(
-                color = labelColor.copy(alpha = 0.15f),
-                start = Offset(leftPad, y),
-                end = Offset(size.width - rightPad, y),
-                strokeWidth = 1.dp.toPx()
-            )
             drawText(
                 textLayoutResult = label,
                 topLeft = Offset(leftPad - label.size.width - 6.dp.toPx(), y - label.size.height / 2f)
             )
         }
-
-        if (items.isEmpty() || chartW <= 0f) return@Canvas
 
         val stepX = if (items.size > 1) chartW / (items.size - 1) else 0f
         val points = items.mapIndexed { index, item ->
@@ -671,16 +663,8 @@ private fun CanvasChart(
             Offset(leftPad + index * stepX, topPad + chartH * (1f - yFraction))
         }
 
-        // 单调平滑曲线（中点二次贝塞尔，贴近 recharts monotone）
-        val linePath = Path().apply {
-            moveTo(points.first().x, points.first().y)
-            for (i in 1 until points.size) {
-                val midX = (points[i - 1].x + points[i].x) / 2f
-                val midY = (points[i - 1].y + points[i].y) / 2f
-                quadraticBezierTo(points[i - 1].x, points[i - 1].y, midX, midY)
-            }
-            lineTo(points.last().x, points.last().y)
-        }
+        // 单调平滑曲线（Fritsch–Carlson，曲线严格经过每个数据点，对齐 recharts type="monotone"）
+        val linePath = monotonePath(points)
 
         // 渐变面积（primary 15% → 0%）
         val areaPath = Path().apply {
@@ -716,6 +700,51 @@ private fun CanvasChart(
             drawText(textLayoutResult = label, topLeft = Offset(x, topPad + chartH + 8.dp.toPx()))
         }
     }
+}
+
+/**
+ * Fritsch–Carlson 单调三次插值 → 三次贝塞尔路径。
+ * 与 recharts type="monotone"（d3 curveMonotoneX 同族）一致：曲线严格经过每个数据点，
+ * 且在局部极值处不产生过冲（峰值点即曲线顶点）。
+ */
+private fun monotonePath(points: List<Offset>): Path {
+    val path = Path()
+    val n = points.size
+    if (n == 0) return path
+    path.moveTo(points[0].x, points[0].y)
+    if (n == 1) return path
+
+    // 相邻线段的斜率（Canvas 坐标系 y 向下，符号随数据自然翻转，不影响单调性判定）
+    val dx = FloatArray(n - 1) { points[it + 1].x - points[it].x }
+    val delta = FloatArray(n - 1) { i ->
+        if (dx[i] == 0f) 0f else (points[i + 1].y - points[i].y) / dx[i]
+    }
+
+    // 内部点切线：两侧斜率异号（局部极值）取 0，否则取加权调和平均（保证单调不过冲）
+    val tangent = FloatArray(n)
+    for (i in 1 until n - 1) {
+        tangent[i] = if (delta[i - 1] * delta[i] <= 0f) {
+            0f
+        } else {
+            val w1 = 2f * dx[i] + dx[i - 1]
+            val w2 = dx[i] + 2f * dx[i - 1]
+            (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i])
+        }
+    }
+    // 端点切线（d3 slope2 口径）：由 3×端段斜率与相邻切线推得，避免端部翘起
+    tangent[0] = if (n == 2) delta[0] else (3f * delta[0] - tangent[1]) / 2f
+    tangent[n - 1] = if (n == 2) delta[n - 2] else (3f * delta[n - 2] - tangent[n - 2]) / 2f
+
+    // Hermite → 三次贝塞尔：控制点取两端各 1/3 段长处的切线端点
+    for (i in 0 until n - 1) {
+        val h = dx[i]
+        path.cubicTo(
+            points[i].x + h / 3f, points[i].y + tangent[i] * h / 3f,
+            points[i + 1].x - h / 3f, points[i + 1].y - tangent[i + 1] * h / 3f,
+            points[i + 1].x, points[i + 1].y
+        )
+    }
+    return path
 }
 
 // ---------- 里程碑：路图 ----------
