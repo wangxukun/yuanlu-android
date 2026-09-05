@@ -18,8 +18,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,13 +41,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -59,6 +59,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -66,15 +68,19 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 /**
- * 编辑资料弹窗（复刻 Web EditProfileModal 的 BottomSheet 形态）：
+ * 编辑资料弹窗（复刻 Web EditProfileModal）：全屏 Dialog 呈现，
  * 双 Tab——个人资料（头像/昵称/英语水平/个性签名）+ 学习目标（三项滑杆）。
+ * 全屏实现：[DialogProperties] 关闭平台默认宽度限制并解除系统栏内嵌
+ * （decorFitsSystemWindows = false），内容 fillMaxSize 撑满；头部
+ * statusBarsPadding 避让状态栏，底部操作区 navigationBarsPadding +
+ * imePadding 避让导航栏与输入法。
  * 头像裁剪占位逻辑：Photo Picker 选图后做程序化居中正方形裁剪 + 压缩上传
  * （Web 端 react-easy-crop 交互式裁剪的端内等价占位，接入交互裁剪时替换
  * [cropSquareJpeg] 调用处即可）。
  */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun EditProfileSheet(
+fun EditProfileDialog(
     state: UserProfileUiState,
     onClose: () -> Unit,
     onSwitchTab: (EditProfileTab) -> Unit,
@@ -87,13 +93,20 @@ fun EditProfileSheet(
     onAvatarPicked: (ByteArray?) -> Unit,
     onSave: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
+    Dialog(
         onDismissRequest = onClose,
-        sheetState = sheetState
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Column {
-            // ---- 头部：品牌渐变 + 标题 + 关闭（Web gradient header） ----
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
+            // ---- 头部：品牌渐变 + 标题 + 关闭（Web gradient header）。
+            // 渐变延伸到状态栏后方，内容由 statusBarsPadding 压入安全区 ----
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -105,6 +118,7 @@ fun EditProfileSheet(
                             )
                         )
                     )
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -154,10 +168,10 @@ fun EditProfileSheet(
                 )
             }
 
-            // ---- 表单内容 ----
+            // ---- 表单内容（撑满剩余高度，底部操作区固定在屏幕底部） ----
             Column(
                 modifier = Modifier
-                    .weight(1f, fill = false)
+                    .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
@@ -180,11 +194,14 @@ fun EditProfileSheet(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // ---- 底部操作区 ----
+            // ---- 底部操作区（背景延伸到导航栏后方，按钮压入安全区；
+            // imePadding 让键盘弹出时保存按钮抬升到输入法上方） ----
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    .navigationBarsPadding()
+                    .imePadding()
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically

@@ -102,7 +102,7 @@ private enum class CenterTab(val label: String) {
 
 /**
  * 个人中心页（复刻 Web /auth/personal-center）：头部用户卡 + 三选项卡
- * （旅程数据/里程碑/账号与安全）+ 编辑资料 BottomSheet。
+ * （旅程数据/里程碑/账号与安全）+ 编辑资料全屏弹窗。
  */
 @Composable
 fun PersonalCenterRoute(
@@ -171,7 +171,7 @@ fun PersonalCenterRoute(
     }
 
     if (state.isEditOpen) {
-        EditProfileSheet(
+        EditProfileDialog(
             state = state,
             onClose = viewModel::closeEdit,
             onSwitchTab = viewModel::switchEditTab,
