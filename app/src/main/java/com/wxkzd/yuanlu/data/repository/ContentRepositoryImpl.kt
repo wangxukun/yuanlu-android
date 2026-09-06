@@ -1,9 +1,12 @@
 package com.wxkzd.yuanlu.data.repository
 
+import android.util.Log
+import com.wxkzd.yuanlu.core.auth.TokenStore
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.ContentApi
 import com.wxkzd.yuanlu.data.remote.dto.CommentDto
 import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.FavoriteMutationDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyDeleteRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyReviewRequestDto
@@ -17,6 +20,7 @@ import com.wxkzd.yuanlu.domain.model.DictEntry
 import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
+import com.wxkzd.yuanlu.domain.model.FavoritesBundle
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
@@ -33,7 +37,8 @@ import javax.inject.Singleton
 
 @Singleton
 class ContentRepositoryImpl @Inject constructor(
-    private val api: ContentApi
+    private val api: ContentApi,
+    private val tokenStore: TokenStore
 ) : ContentRepository {
 
     override suspend fun getLatestEpisodes(page: Int, pageSize: Int): Result<List<Episode>> =
@@ -365,6 +370,52 @@ class ContentRepositoryImpl @Inject constructor(
         }
     }
 
+    // ---------- 收藏 ----------
+
+    override suspend fun getFavorites(): Result<FavoritesBundle> = call {
+        val response = api.userFavorites()
+        val data = response.data
+        if (!response.success || data == null) {
+            throw IOException(response.message ?: "收藏加载失败")
+        }
+        data.toDomain()
+    }
+
+    override suspend fun checkPodcastFavorite(podcastid: String): Result<Boolean> =
+        callFavoriteCheck { userid -> api.checkPodcastFavorite(podcastid, userid) }
+
+    override suspend fun addPodcastFavorite(podcastid: String): Result<Unit> =
+        callFavoriteMutation { userid -> api.addPodcastFavorite(podcastid, userid) }
+
+    override suspend fun removePodcastFavorite(podcastid: String): Result<Unit> =
+        callFavoriteMutation { userid -> api.removePodcastFavorite(podcastid, userid) }
+
+    override suspend fun checkEpisodeFavorite(episodeid: String): Result<Boolean> =
+        callFavoriteCheck { userid -> api.checkEpisodeFavorite(episodeid, userid) }
+
+    override suspend fun addEpisodeFavorite(episodeid: String): Result<Unit> =
+        callFavoriteMutation { userid -> api.addEpisodeFavorite(episodeid, userid) }
+
+    override suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit> =
+        callFavoriteMutation { userid -> api.removeEpisodeFavorite(episodeid, userid) }
+
+    /** 收藏三件套（find-unique/insert/delete）都以 userid 为请求参数，未登录统一拦截 */
+    private suspend fun requireUserid(): String =
+        tokenStore.getUserid() ?: throw FavoriteUnauthorizedException()
+
+    private suspend fun callFavoriteCheck(
+        block: suspend (userid: String) -> FavoriteMutationDto
+    ): Result<Boolean> = call { block(requireUserid()).success }
+
+    private suspend fun callFavoriteMutation(
+        block: suspend (userid: String) -> FavoriteMutationDto
+    ): Result<Unit> = call {
+        val response = block(requireUserid())
+        if (!response.success) {
+            throw IOException(response.message ?: "操作失败")
+        }
+    }
+
     private suspend fun <T> call(block: suspend () -> T): Result<T> =
         withContext(Dispatchers.IO) {
             try {
@@ -378,8 +429,22 @@ class ContentRepositoryImpl @Inject constructor(
                     else -> "请求失败（${e.code()}）"
                 }
                 Result.Error(e.code(), message)
+            } catch (e: FavoriteUnauthorizedException) {
+                Result.Error(401, "请先登录后收藏")
             } catch (e: Exception) {
+                Log.w(TAG, "repository call failed: ${e.javaClass.simpleName}: ${e.message}")
                 Result.Error(600, e.message ?: "Unexpected error")
+            } catch (t: Throwable) {
+                // Error/ linkage 类崩溃（Exception 捕不住）也不能让调用方拿到假成功
+                Log.e(TAG, "repository call crashed", t)
+                Result.Error(600, t.message ?: "Unexpected error")
             }
         }
+
+    private companion object {
+        const val TAG = "ContentRepository"
+    }
 }
+
+/** 本地无 userid（JWT 缺失/未登录）时收藏接口的统一信号 */
+private class FavoriteUnauthorizedException : Exception("unauthorized")

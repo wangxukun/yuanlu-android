@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.UserProfile
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
+import com.wxkzd.yuanlu.feature.favorites.FavoriteCenter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,7 +22,8 @@ data class ProfileUiState(
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val favoriteCenter: FavoriteCenter
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -57,6 +59,8 @@ class ProfileViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
+            // 清空全局收藏态，避免下一账号/游客态读到上一用户的收藏覆盖值
+            favoriteCenter.clear()
             _uiState.value = ProfileUiState()
         }
     }

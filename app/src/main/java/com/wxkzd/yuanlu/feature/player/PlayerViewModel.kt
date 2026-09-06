@@ -9,6 +9,7 @@ import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.Subtitle
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
+import com.wxkzd.yuanlu.feature.favorites.FavoriteCenter
 import com.wxkzd.yuanlu.ui.components.isLoadableCoverUrl
 import com.wxkzd.yuanlu.ui.components.resolveEpisodeCoverUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -41,14 +42,19 @@ data class EpisodeDetailUiState(
     // 从 JWT 解出的用户角色（USER | PREMIUM | ADMIN）；专属剧集对非会员展示锁图标用
     val userRole: String? = null,
     // 文稿（双语字幕）弹层
-    val isTranscriptOpen: Boolean = false
+    val isTranscriptOpen: Boolean = false,
+    // 收藏态（全局 FavoriteCenter 驱动：列表页取消收藏后返回本页同步空心）
+    val isFavorited: Boolean = false,
+    // 收藏请求在途（对齐 Web isLoadingFavorite）
+    val isFavoriteBusy: Boolean = false
 )
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playerController: PlayerController,
     private val contentRepository: ContentRepository,
-    private val tokenStore: TokenStore
+    private val tokenStore: TokenStore,
+    private val favoriteCenter: FavoriteCenter
 ) : ViewModel() {
 
     val playerState = playerController.playerState
@@ -80,6 +86,7 @@ class PlayerViewModel @Inject constructor(
     )
 
     private var loadedEpisodeId: String? = null
+    private var favoriteKey: FavoriteCenter.Key? = null
 
     init {
         // 登录态与角色变化同步进详情状态（评论表单/专属剧集锁图标等据此切换）
@@ -92,6 +99,24 @@ class PlayerViewModel @Inject constructor(
             tokenStore.roleFlow.collect { role ->
                 _uiState.update { it.copy(userRole = role) }
             }
+        }
+        // 全局收藏中心驱动：任意页面（收藏列表/播客详情）变更后本页图标同步翻转
+        viewModelScope.launch {
+            favoriteCenter.states.collect { table ->
+                val key = favoriteKey ?: return@collect
+                table[key]?.let { favorited ->
+                    _uiState.update { it.copy(isFavorited = favorited) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            favoriteCenter.pendingKeys.collect { pending ->
+                val key = favoriteKey ?: return@collect
+                _uiState.update { it.copy(isFavoriteBusy = key in pending) }
+            }
+        }
+        viewModelScope.launch {
+            favoriteCenter.messages.collect { _toast.value = it }
         }
     }
 
@@ -135,7 +160,20 @@ class PlayerViewModel @Inject constructor(
                 is Result.Error -> _toast.value = subtitlesResult.message
                 Result.NetworkError -> _toast.value = "字幕加载失败，请检查网络"
             }
-            _uiState.update { it.copy(isLoading = false, episode = episode, audioUrl = audioUrl) }
+            // 收藏态初值：episode detail 的 userState.isFavorited 走 authWithMobile（Bearer 可靠），
+            // 全局中心已有更新值时优先（列表页/其他页面刚变更过）
+            val key = FavoriteCenter.Key(FavoriteCenter.Target.EPISODE, episodeid)
+            favoriteKey = key
+            val initialFavorite = favoriteCenter.knownState(key) ?: episode.isFavorited
+            favoriteCenter.seedIfAbsent(key, initialFavorite)
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    episode = episode,
+                    audioUrl = audioUrl,
+                    isFavorited = initialFavorite
+                )
+            }
 
             // 播客详情：detail 接口的 coverUrl 未签名（Web 端在服务端重签），Android 在此替换。
             // 用本接口而非 list-by-podcastid 分页：后者首页仅 100 条，更早的剧集（本播客
@@ -186,6 +224,11 @@ class PlayerViewModel @Inject constructor(
 
     fun retry() {
         loadedEpisodeId?.let { load(it) }
+    }
+
+    /** 收藏/取消收藏：乐观翻转由 FavoriteCenter 统一处理并广播（对齐 Web handleToggleFavorite） */
+    fun toggleFavorite() {
+        loadedEpisodeId?.let { favoriteCenter.toggleEpisode(it) }
     }
 
     fun consumeToast() {

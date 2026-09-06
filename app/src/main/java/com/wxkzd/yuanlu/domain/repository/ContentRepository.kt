@@ -6,6 +6,7 @@ import com.wxkzd.yuanlu.domain.model.DictEntry
 import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
+import com.wxkzd.yuanlu.domain.model.FavoritesBundle
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
@@ -109,4 +110,27 @@ interface ContentRepository {
         progressSeconds: Float,
         isFinished: Boolean
     ): Result<Unit>
+
+    // ---------- 收藏（我的收藏列表 + 详情页收藏交互，对齐 Web） ----------
+
+    /** 收藏的播客系列与单集（GET api/user/favorites，需登录） */
+    suspend fun getFavorites(): Result<FavoritesBundle>
+
+    /** 查询播客收藏态（GET api/podcast/favorite/find-unique）；未登录返回 Error */
+    suspend fun checkPodcastFavorite(podcastid: String): Result<Boolean>
+
+    /** 收藏播客（POST api/podcast/favorite/insert，写 followerCount+1） */
+    suspend fun addPodcastFavorite(podcastid: String): Result<Unit>
+
+    /** 取消收藏播客（DELETE api/podcast/favorite/delete） */
+    suspend fun removePodcastFavorite(podcastid: String): Result<Unit>
+
+    /** 查询单集收藏态（GET api/episode/favorite/find-unique）；未登录返回 Error */
+    suspend fun checkEpisodeFavorite(episodeid: String): Result<Boolean>
+
+    /** 收藏单集（POST api/episode/favorite/insert） */
+    suspend fun addEpisodeFavorite(episodeid: String): Result<Unit>
+
+    /** 取消收藏单集（DELETE api/episode/favorite/delete） */
+    suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit>
 }

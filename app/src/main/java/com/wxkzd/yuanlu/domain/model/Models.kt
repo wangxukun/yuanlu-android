@@ -205,3 +205,46 @@ data class AchievementItem(
     val unlocked: Boolean = false,
     val unlockedAt: String? = null
 )
+
+// ---------- 我的收藏（对齐 Web core/favorites/dto.ts） ----------
+
+/** 收藏的播客系列（GET api/user/favorites 的 podcasts 项） */
+data class FavoriteSeries(
+    val id: String,
+    val title: String,
+    /** Web 端取 platform，兜底播客标题 */
+    val author: String,
+    val thumbnailUrl: String? = null,
+    val category: List<Tag> = emptyList(),
+    val episodeCount: Int = 0,
+    val plays: Int = 0,
+    val followers: Int = 0
+)
+
+/** 收藏的单集（GET api/user/favorites 的 episodes 项） */
+data class FavoriteEpisode(
+    val id: String,
+    val title: String,
+    /** 所属播客标题 */
+    val author: String,
+    /** 所属播客平台（可能为空） */
+    val platform: String = "",
+    val thumbnailUrl: String? = null,
+    /** Web 端以播客名充当分类标签 */
+    val category: String = "",
+    /** 服务端已格式化的中文日期 */
+    val date: String = "",
+    /** 服务端已格式化的 "M:SS" 时长 */
+    val duration: String = "",
+    val playCount: Int = 0,
+    /** 该单集的总收藏数（服务端 _count.episode_favorites 聚合） */
+    val favoriteCount: Int = 0,
+    /** 用于跳转所属播客 */
+    val podcastId: String = ""
+)
+
+/** 一次收藏列表拉取结果 */
+data class FavoritesBundle(
+    val podcasts: List<FavoriteSeries> = emptyList(),
+    val episodes: List<FavoriteEpisode> = emptyList()
+)

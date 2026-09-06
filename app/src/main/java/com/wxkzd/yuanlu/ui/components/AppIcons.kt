@@ -234,14 +234,35 @@ val MicIcon: ImageVector = materialIcon(name = "Filled.Mic") {
         close()
         moveTo(17.3f, 11.0f)
         curveToRelative(0.0f, 3.0f, -2.54f, 5.1f, -5.3f, 5.1f)
-        reflectiveCurveTo(6.7f, 14.0f, 6.7f, 11.0f)
-        horizontalLineTo(5.0f)
+        reflectiveCurveToRelative(-5.3f, -2.1f, -5.3f, -5.1f)
+        horizontalLineToRelative(-1.7f)
         curveToRelative(0.0f, 3.41f, 2.72f, 6.23f, 6.0f, 6.72f)
         verticalLineTo(21.0f)
         horizontalLineToRelative(2.0f)
         verticalLineToRelative(-3.28f)
         curveToRelative(3.28f, -0.48f, 6.0f, -3.3f, 6.0f, -6.72f)
         horizontalLineToRelative(-1.7f)
+        close()
+    }
+}
+
+/** 图层（Web 端 lucide Layers）：收藏卡片统计行的单集数 */
+val LayersIcon: ImageVector = materialIcon(name = "Filled.Layers") {
+    materialPath {
+        moveTo(11.99f, 18.54f)
+        lineToRelative(-7.37f, -5.73f)
+        lineTo(3.0f, 14.07f)
+        lineToRelative(9.0f, 7.0f)
+        lineToRelative(9.0f, -7.0f)
+        lineToRelative(-1.63f, -1.27f)
+        lineToRelative(-7.38f, 5.74f)
+        close()
+        moveTo(12.0f, 16.0f)
+        lineToRelative(7.36f, -5.73f)
+        lineTo(21.0f, 9.0f)
+        lineToRelative(-9.0f, -7.0f)
+        lineToRelative(-9.0f, 7.0f)
+        lineToRelative(1.63f, 1.27f)
         close()
     }
 }

@@ -56,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -202,7 +203,8 @@ fun PlayerScreen(
                     onTranslateTitle = viewModel::translateTitle,
                     onTranslateDescription = viewModel::translateDescription,
                     onSubmitComment = viewModel::submitComment,
-                    onToggleLike = viewModel::toggleCommentLike
+                    onToggleLike = viewModel::toggleCommentLike,
+                    onToggleFavorite = viewModel::toggleFavorite
                 )
             }
         }
@@ -248,7 +250,8 @@ private fun EpisodeDetailContent(
     onTranslateTitle: () -> Unit,
     onTranslateDescription: () -> Unit,
     onSubmitComment: (String, Int?) -> Unit,
-    onToggleLike: (Int) -> Unit
+    onToggleLike: (Int) -> Unit,
+    onToggleFavorite: () -> Unit
 ) {
     val context = LocalContext.current
     // 权限口径统一走 Permissions（yuanlu guard.ts 客户端复刻）：
@@ -483,7 +486,8 @@ private fun EpisodeDetailContent(
             ActionSection(
                 isPlayingThis = isPlayingThis,
                 isLocked = isLocked,
-                isFavorited = episode.isFavorited,
+                isFavorited = state.isFavorited,
+                isFavoriteBusy = state.isFavoriteBusy,
                 onListening = { handlePlayTap(listen = true) },
                 // 语音评测（对齐 Web handleStartPractice）：游客→登录引导；专属+非会员→升级提示；其余进入评测页
                 onPractice = {
@@ -509,12 +513,12 @@ private fun EpisodeDetailContent(
                         onOpenTranscript()
                     }
                 },
-                // 收藏（对齐 Web handleToggleFavorite）：游客先登录
+                // 收藏（对齐 Web handleToggleFavorite）：游客先登录，登录后走 FavoriteCenter
                 onFavorite = {
                     if (!state.isLoggedIn) {
                         Toast.makeText(context, "请先登录后收藏", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "收藏功能即将上线", Toast.LENGTH_SHORT).show()
+                        onToggleFavorite()
                     }
                 },
                 onShare = {
@@ -664,6 +668,7 @@ private fun ActionSection(
     isPlayingThis: Boolean,
     isLocked: Boolean,
     isFavorited: Boolean,
+    isFavoriteBusy: Boolean,
     onListening: () -> Unit,
     onPractice: () -> Unit,
     onDownloadAudio: () -> Unit,
@@ -711,6 +716,7 @@ private fun ActionSection(
                 icon = if (isFavorited) BookmarkIcon else BookmarkBorderIcon,
                 label = "收藏",
                 onClick = onFavorite,
+                enabled = !isFavoriteBusy,
                 tint = if (isFavorited) brandPrimary() else subTextColor(),
                 modifier = Modifier.weight(1f)
             )
@@ -754,14 +760,16 @@ private fun IconActionBox(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     tint: Color = subTextColor()
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, dividerColor(), RoundedCornerShape(12.dp))
-            .clickable { onClick() }
-            .padding(vertical = 10.dp),
+            .clickable(enabled = enabled) { onClick() }
+            .padding(vertical = 10.dp)
+            .alpha(if (enabled) 1f else 0.5f),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))

@@ -215,4 +215,14 @@ private class RecordingRepository : ContentRepository {
     override suspend fun deleteVocabulary(vocabularyid: Int): Result<Unit> = error("unused")
     override suspend fun submitVocabularyReview(vocabularyid: Int, quality: Int): Result<com.wxkzd.yuanlu.domain.model.VocabularyReviewOutcome> = error("unused")
     override suspend fun updateVocabularyStatus(vocabularyid: Int, mastered: Boolean): Result<Unit> = error("unused")
+    override suspend fun fetchTtsAudioUrl(text: String): Result<String> = error("unused")
+
+    // 收藏：本测试不涉及
+    override suspend fun getFavorites(): Result<com.wxkzd.yuanlu.domain.model.FavoritesBundle> = error("unused")
+    override suspend fun checkPodcastFavorite(podcastid: String): Result<Boolean> = error("unused")
+    override suspend fun addPodcastFavorite(podcastid: String): Result<Unit> = error("unused")
+    override suspend fun removePodcastFavorite(podcastid: String): Result<Unit> = error("unused")
+    override suspend fun checkEpisodeFavorite(episodeid: String): Result<Boolean> = error("unused")
+    override suspend fun addEpisodeFavorite(episodeid: String): Result<Unit> = error("unused")
+    override suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit> = error("unused")
 }

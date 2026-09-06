@@ -49,8 +49,8 @@ object DataModule {
 
     @Provides
     @Singleton
-    fun provideContentRepository(api: ContentApi): ContentRepository {
-        return ContentRepositoryImpl(api)
+    fun provideContentRepository(api: ContentApi, tokenStore: TokenStore): ContentRepository {
+        return ContentRepositoryImpl(api, tokenStore)
     }
 
     @Provides

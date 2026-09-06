@@ -70,7 +70,8 @@ fun ProfileScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     // 个人中心 VM（Activity 作用域）：编辑资料保存后借 profileRevision 刷新本页用户卡
     userProfileViewModel: UserProfileViewModel,
-    onOpenPersonalCenter: () -> Unit
+    onOpenPersonalCenter: () -> Unit,
+    onOpenFavorites: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val userCenterState by userProfileViewModel.uiState.collectAsStateWithLifecycle()
@@ -117,7 +118,7 @@ fun ProfileScreen(
                     MenuRow("发音弱项本", Icons.Filled.Mic, MaterialTheme.colorScheme.tertiary) { comingSoon("发音弱项本") }
                     MenuRow("学习路径", Icons.Filled.School, MaterialTheme.colorScheme.primary) { comingSoon("学习路径") }
                     MenuRow("收听历史", Icons.Filled.History, MaterialTheme.colorScheme.secondary) { comingSoon("收听历史") }
-                    MenuRow("我的收藏", Icons.Filled.Bookmark, Color(0xFFB96F0F)) { comingSoon("我的收藏") }
+                    MenuRow("我的收藏", Icons.Filled.Bookmark, Color(0xFFB96F0F)) { onOpenFavorites() }
                 }
             }
 

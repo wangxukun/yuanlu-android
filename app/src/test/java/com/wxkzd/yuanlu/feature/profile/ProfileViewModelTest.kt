@@ -1,6 +1,8 @@
 package com.wxkzd.yuanlu.feature.profile
 
+import com.wxkzd.yuanlu.FakeContentRepository
 import com.wxkzd.yuanlu.core.network.Result
+import com.wxkzd.yuanlu.feature.favorites.FavoriteCenter
 import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
 import com.wxkzd.yuanlu.domain.model.UserProfile
@@ -45,7 +47,7 @@ class ProfileViewModelTest {
                 role = "PREMIUM"
             )
         )
-        val viewModel = ProfileViewModel(repository)
+        val viewModel = ProfileViewModel(repository, FavoriteCenter(FakeContentRepository()))
         viewModel.onAuthStateChanged(loggedIn = true)
         runCurrent()
 
@@ -56,7 +58,7 @@ class ProfileViewModelTest {
     @Test
     fun `auth state guest clears profile`() = runTest(dispatcher) {
         val repository = FakeAuthRepository()
-        val viewModel = ProfileViewModel(repository)
+        val viewModel = ProfileViewModel(repository, FavoriteCenter(FakeContentRepository()))
         viewModel.onAuthStateChanged(true)
         runCurrent()
         assertEquals("远路客", viewModel.uiState.value.profile?.nickname)
@@ -68,7 +70,7 @@ class ProfileViewModelTest {
     @Test
     fun `logout clears profile`() = runTest(dispatcher) {
         val repository = FakeAuthRepository()
-        val viewModel = ProfileViewModel(repository)
+        val viewModel = ProfileViewModel(repository, FavoriteCenter(FakeContentRepository()))
         viewModel.onAuthStateChanged(true)
         runCurrent()
         viewModel.logout()
@@ -81,7 +83,7 @@ class ProfileViewModelTest {
     @Test
     fun `load error surfaces message and retry works`() = runTest(dispatcher) {
         val repository = FakeAuthRepository(profileError = "请先登录")
-        val viewModel = ProfileViewModel(repository)
+        val viewModel = ProfileViewModel(repository, FavoriteCenter(FakeContentRepository()))
         viewModel.onAuthStateChanged(true)
         runCurrent()
         assertEquals("请先登录", viewModel.uiState.value.error)

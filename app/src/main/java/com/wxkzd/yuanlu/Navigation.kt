@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -33,6 +34,7 @@ import com.wxkzd.yuanlu.feature.auth.AppViewModel
 import com.wxkzd.yuanlu.feature.auth.LoginSheet
 import com.wxkzd.yuanlu.feature.discover.ChannelRoute
 import com.wxkzd.yuanlu.feature.discover.ChannelListRoute
+import com.wxkzd.yuanlu.feature.favorites.FavoritesRoute
 import com.wxkzd.yuanlu.feature.intensive.IntensiveListeningRoute
 import com.wxkzd.yuanlu.feature.player.FullScreenPlayerScreen
 import com.wxkzd.yuanlu.feature.player.MiniPlayerBar
@@ -102,6 +104,9 @@ private fun AppNavHost(
     // 「我的」Tab 观察其 profileRevision 在资料保存后刷新用户卡
     val userProfileViewModel: UserProfileViewModel = hiltViewModel()
 
+    // Main Tab 选中项提升到导航层：收藏页空态「去发现」需在返回 Main 的同时切到发现 Tab
+    var mainSelectedTab by rememberSaveable { mutableIntStateOf(0) }
+
     var isFullScreenPlayerOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(hasTrack) {
         // 无在播音轨时兜底收起全屏播放器
@@ -141,7 +146,10 @@ private fun AppNavHost(
                         onThemeModeChange = onThemeModeChange,
                         vocabularyViewModel = vocabularyViewModel,
                         userProfileViewModel = userProfileViewModel,
-                        onOpenPersonalCenter = { open(PersonalCenterNav) }
+                        onOpenPersonalCenter = { open(PersonalCenterNav) },
+                        selectedTab = mainSelectedTab,
+                        onSelectTab = { mainSelectedTab = it },
+                        onOpenFavorites = { open(FavoritesNav) }
                     )
                 }
                 // 个人中心：复刻 Web /auth/personal-center（旅程数据/里程碑/账号与安全）
@@ -149,6 +157,19 @@ private fun AppNavHost(
                     PersonalCenterRoute(
                         viewModel = userProfileViewModel,
                         onBack = { back() }
+                    )
+                }
+                // 我的收藏：复刻 Web /library/favorites（播客系列/单集双 Tab + 取消收藏）
+                entry<FavoritesNav> {
+                    FavoritesRoute(
+                        onBack = { back() },
+                        onOpenPodcast = { open(PodcastDetailNav(it)) },
+                        onOpenEpisode = { open(PlayerNav(it)) },
+                        onGoDiscover = {
+                            // 空态引导：切到发现 Tab 并退回主界面
+                            mainSelectedTab = 1
+                            back()
+                        }
                     )
                 }
                 entry<PodcastDetailNav> { key ->

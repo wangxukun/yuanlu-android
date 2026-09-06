@@ -7,6 +7,8 @@ import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.DictResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.EpisodeDto
 import com.wxkzd.yuanlu.data.remote.dto.EpisodePageDto
+import com.wxkzd.yuanlu.data.remote.dto.FavoriteMutationDto
+import com.wxkzd.yuanlu.data.remote.dto.FavoritesResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.PodcastDetailDto
@@ -28,7 +30,11 @@ import com.wxkzd.yuanlu.data.remote.dto.VocabularyWordsResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.YoudaoResponseDto
 import kotlinx.serialization.json.JsonElement
 import retrofit2.http.Body
+import retrofit2.http.DELETE
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -143,4 +149,60 @@ interface ContentApi {
         @Path("episodeid") episodeid: String,
         @Body body: ProgressUpdateRequestDto
     ): ApiResponse<JsonElement>
+
+    // ---------- 收藏（对齐 Web /api/{podcast,episode}/favorite/* 与 /api/user/favorites） ----------
+
+    /** 信封：data = { podcasts, episodes }，需登录；封面/日期/时长服务端已处理 */
+    @GET("api/user/favorites")
+    suspend fun userFavorites(): FavoritesResponseDto
+
+    /** 裸 { success }：success=true 表示已收藏（Web 端 find-unique 口径） */
+    @GET("api/podcast/favorite/find-unique")
+    suspend fun checkPodcastFavorite(
+        @Query("podcastid") podcastid: String,
+        @Query("userid") userid: String
+    ): FavoriteMutationDto
+
+    /** 裸 { success }；后端读 FormData，urlencoded 表单同构；需登录 */
+    @FormUrlEncoded
+    @POST("api/podcast/favorite/insert")
+    suspend fun addPodcastFavorite(
+        @Field("podcastid") podcastid: String,
+        @Field("userid") userid: String
+    ): FavoriteMutationDto
+
+    /**
+     * 裸 { success }；后端固定读 DELETE 方法 + FormData 体。
+     * 注意不能写 @FormUrlEncoded + @DELETE：Retrofit 校验 DELETE 无请求体会直接抛
+     * IllegalArgumentException（请求发不出），必须用 @HTTP(hasBody = true) 声明带体 DELETE。
+     */
+    @FormUrlEncoded
+    @HTTP(method = "DELETE", path = "api/podcast/favorite/delete", hasBody = true)
+    suspend fun removePodcastFavorite(
+        @Field("podcastid") podcastid: String,
+        @Field("userid") userid: String
+    ): FavoriteMutationDto
+
+    /** 裸 { success }：success=true 表示已收藏 */
+    @GET("api/episode/favorite/find-unique")
+    suspend fun checkEpisodeFavorite(
+        @Query("episodeid") episodeid: String,
+        @Query("userid") userid: String
+    ): FavoriteMutationDto
+
+    /** 裸 { success }；需登录 */
+    @FormUrlEncoded
+    @POST("api/episode/favorite/insert")
+    suspend fun addEpisodeFavorite(
+        @Field("episodeid") episodeid: String,
+        @Field("userid") userid: String
+    ): FavoriteMutationDto
+
+    /** 裸 { success }；带体 DELETE（同 removePodcastFavorite 的 @HTTP 说明） */
+    @FormUrlEncoded
+    @HTTP(method = "DELETE", path = "api/episode/favorite/delete", hasBody = true)
+    suspend fun removeEpisodeFavorite(
+        @Field("episodeid") episodeid: String,
+        @Field("userid") userid: String
+    ): FavoriteMutationDto
 }

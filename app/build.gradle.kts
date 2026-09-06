@@ -84,6 +84,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests {
+            // JVM 单测中 android.util.Log 等 framework 调用返回默认值（no-op），
+            // 允许被测对象内联诊断日志而不必引入 logger 抽象
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 kotlin {

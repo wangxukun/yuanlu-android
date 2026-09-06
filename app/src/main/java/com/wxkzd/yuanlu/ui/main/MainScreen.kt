@@ -15,9 +15,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,9 +58,12 @@ fun MainScreen(
     vocabularyViewModel: VocabularyViewModel,
     // 个人中心 VM（Activity 作用域）：编辑资料保存后「我的」Tab 借 profileRevision 刷新用户卡
     userProfileViewModel: UserProfileViewModel,
-    onOpenPersonalCenter: () -> Unit
+    onOpenPersonalCenter: () -> Unit,
+    // Tab 选中态由导航层持有（收藏页空态「去发现」需跨页切换）
+    selectedTab: Int = 0,
+    onSelectTab: (Int) -> Unit = {},
+    onOpenFavorites: () -> Unit = {}
 ) {
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     // 全屏卡片复习打开时隐藏底部导航（复习层挂在全局根层级，盖住迷你播放条）
     val vocabularyState by vocabularyViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -74,7 +74,7 @@ fun MainScreen(
                     TABS.forEachIndexed { index, tab ->
                         NavigationBarItem(
                             selected = selectedTab == index,
-                            onClick = { selectedTab = index },
+                            onClick = { onSelectTab(index) },
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
                             label = { Text(tab.label) }
                         )
@@ -128,7 +128,8 @@ fun MainScreen(
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     userProfileViewModel = userProfileViewModel,
-                    onOpenPersonalCenter = onOpenPersonalCenter
+                    onOpenPersonalCenter = onOpenPersonalCenter,
+                    onOpenFavorites = onOpenFavorites
                 )
             }
         }

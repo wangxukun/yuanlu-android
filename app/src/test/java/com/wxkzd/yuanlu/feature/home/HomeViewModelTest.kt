@@ -204,4 +204,29 @@ private class FakeContentRepository(
 
     override suspend fun translate(text: String): Result<String> =
         Result.Error(0, "not implemented in fake")
+
+    override suspend fun fetchTtsAudioUrl(text: String): Result<String> =
+        Result.Error(600, "not implemented in fake")
+
+    // 收藏：本测试不涉及，给出空实现以满足接口
+    override suspend fun getFavorites(): Result<com.wxkzd.yuanlu.domain.model.FavoritesBundle> =
+        Result.Success(com.wxkzd.yuanlu.domain.model.FavoritesBundle())
+
+    override suspend fun checkPodcastFavorite(podcastid: String): Result<Boolean> =
+        Result.Success(false)
+
+    override suspend fun addPodcastFavorite(podcastid: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun removePodcastFavorite(podcastid: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun checkEpisodeFavorite(episodeid: String): Result<Boolean> =
+        Result.Success(false)
+
+    override suspend fun addEpisodeFavorite(episodeid: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
 }

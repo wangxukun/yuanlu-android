@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -102,6 +103,15 @@ fun PodcastDetailScreen(
     viewModel: PodcastDetailViewModel
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val toast by viewModel.toast.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    LaunchedEffect(toast) {
+        toast?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.consumeToast()
+        }
+    }
 
     when {
         state.isLoading -> LoadingBox()
@@ -114,6 +124,7 @@ fun PodcastDetailScreen(
             onOpenChannel = onOpenChannel,
             onOpenEpisode = onOpenEpisode,
             onLoadMore = viewModel::loadMore,
+            onToggleFavorite = viewModel::toggleFavorite,
             modifier = Modifier.statusBarsPadding()
         )
     }
@@ -131,6 +142,7 @@ private fun PodcastDetailContent(
     onOpenChannel: (String) -> Unit,
     onOpenEpisode: (String) -> Unit,
     onLoadMore: () -> Unit,
+    onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val podcast = state.podcast!!
@@ -177,9 +189,8 @@ private fun PodcastDetailContent(
             podcast = podcast,
             episodeCount = podcast.episodeCount.takeIf { it > 0 } ?: state.total,
             isFavorited = state.isFavorited,
-            onFavorite = {
-                Toast.makeText(context, "收藏功能即将上线", Toast.LENGTH_SHORT).show()
-            },
+            isFavoriteBusy = state.isFavoriteBusy,
+            onFavorite = onToggleFavorite,
             onShare = {
                 val text = buildString {
                     append("播客「${podcast.title}」")
@@ -269,6 +280,7 @@ private fun PodcastHeaderCard(
     podcast: Podcast,
     episodeCount: Int,
     isFavorited: Boolean,
+    isFavoriteBusy: Boolean,
     onFavorite: () -> Unit,
     onShare: () -> Unit
 ) {
@@ -354,6 +366,7 @@ private fun PodcastHeaderCard(
                     label = if (isFavorited) "已收藏" else "收藏",
                     tint = if (isFavorited) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant,
+                    enabled = !isFavoriteBusy,
                     onClick = onFavorite
                 )
                 HeaderAction(
@@ -375,20 +388,22 @@ private fun PodcastHeaderCard(
     }
 }
 
-/** 卡片操作项：图标 + 文字的小按钮（收藏/分享） */
+/** 卡片操作项：图标 + 文字的小按钮（收藏/分享）；enabled=false 时置灰防连点 */
 @Composable
 private fun HeaderAction(
     icon: ImageVector,
     label: String,
     tint: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
-            .clickable { onClick() }
+            .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 2.dp)
+            .alpha(if (enabled) 1f else 0.5f)
     ) {
         Icon(
             imageVector = icon,

@@ -31,7 +31,12 @@ class TokenStore @Inject constructor(
 
     /** 从 JWT payload 解出的当前用户角色（USER | PREMIUM | ADMIN），未登录/解析失败为 null */
     val roleFlow: Flow<String?> = context.dataStore.data.map { preferences ->
-        decodeJwtRole(preferences[TOKEN_KEY])
+        decodeJwtClaim(preferences[TOKEN_KEY], "role")
+    }
+
+    /** 从 JWT payload 解出的当前用户 id（收藏等接口请求参数需要），未登录/解析失败为 null */
+    val useridFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        decodeJwtClaim(preferences[TOKEN_KEY], "userid")
     }
 
     suspend fun saveToken(token: String) {
@@ -50,13 +55,18 @@ class TokenStore @Inject constructor(
         return context.dataStore.data.first()[TOKEN_KEY]
     }
 
-    /** 解码 JWT payload（base64url 无填充）中的 role 声明 */
-    private fun decodeJwtRole(token: String?): String? {
+    /** 读取指定声明（如 userid/role）；供不便订阅 Flow 的调用方同步获取 */
+    suspend fun getUserid(): String? {
+        return decodeJwtClaim(getToken(), "userid")
+    }
+
+    /** 解码 JWT payload（base64url 无填充）中的指定声明 */
+    private fun decodeJwtClaim(token: String?, claim: String): String? {
         if (token.isNullOrBlank()) return null
         return try {
             val payload = token.split(".").getOrNull(1) ?: return null
             val json = String(Base64.decode(payload, Base64.URL_SAFE), Charsets.UTF_8)
-            Json.parseToJsonElement(json).jsonObject["role"]?.jsonPrimitive?.content
+            Json.parseToJsonElement(json).jsonObject[claim]?.jsonPrimitive?.content
         } catch (e: Exception) {
             null
         }
