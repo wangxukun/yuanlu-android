@@ -1,0 +1,567 @@
+package com.wxkzd.yuanlu.feature.voice
+
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.wxkzd.yuanlu.core.datastore.PracticeSettingsStore
+import com.wxkzd.yuanlu.core.datastore.SettingsStore
+import com.wxkzd.yuanlu.core.network.Result
+import com.wxkzd.yuanlu.core.recorder.WavRecorder
+import com.wxkzd.yuanlu.domain.model.EvalPhase
+import com.wxkzd.yuanlu.domain.model.PracticeSettings
+import com.wxkzd.yuanlu.domain.model.SpeechEvalResult
+import com.wxkzd.yuanlu.domain.model.SpeechPracticeRecord
+import com.wxkzd.yuanlu.domain.model.Subtitle
+import com.wxkzd.yuanlu.domain.repository.ContentRepository
+import com.wxkzd.yuanlu.domain.repository.SpeechRepository
+import com.wxkzd.yuanlu.theme.ThemeMode
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import javax.inject.Inject
+
+/** 页面内互斥的播放来源 */
+enum class PlaybackKind { NONE, AI, ORIGINAL, SLOW, USER, WORD_US, WORD_UK, WORD_ORIGINAL, WORD_ME }
+
+data class SpeechEvalUiState(
+    val isLoading: Boolean = true,
+    val loadError: String? = null,
+    val audioUrl: String? = null,
+    val subtitles: List<Subtitle> = emptyList(),
+    val index: Int = 0,
+    val records: List<SpeechPracticeRecord> = emptyList(),
+    val isTrialMode: Boolean = false,
+    val phase: EvalPhase = EvalPhase.IDLE,
+    val result: SpeechEvalResult? = null,
+    /** 录音音量条（滚动窗口 0..100） */
+    val amplitudes: List<Int> = emptyList(),
+    /** 音素诊断选中的词下标（result.words） */
+    val selectedWordIndex: Int? = null,
+    val playing: PlaybackKind = PlaybackKind.NONE,
+    val settings: PracticeSettings = PracticeSettings(),
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** 音标模式的逐词音标缓存（word 小写 → US 音标，含斜杠） */
+    val ipaCache: Map<String, String> = emptyMap(),
+    /** 盲读模式是否揭示原文：换句复位、新一轮评测结果产出后自动揭示（Web blindRevealed 同口径） */
+    val blindRevealed: Boolean = false
+) {
+    val current: Subtitle? get() = subtitles.getOrNull(index)
+    val effectiveThreshold: Int get() = settings.effectivePassThreshold
+
+    /** 过滤集内已练句数（按匹配口径去重，Web practicedInFilter 同口径） */
+    val practicedCount: Int
+        get() = subtitles.count { sub -> records.any { matchesRecord(sub, it) } }
+
+    /** 当前句的最新历史评测记录（顶部操作栏"最近得分"入口依据，Web getLatestResult 同匹配口径） */
+    val latestRecord: SpeechPracticeRecord?
+        get() = current?.let { sub -> records.filter { matchesRecord(sub, it) }.maxByOrNull { it.recognitionid } }
+
+    val progressPercent: Float
+        get() = if (subtitles.isEmpty()) 0f else practicedCount.toFloat() / subtitles.size
+}
+
+/** 历史记录与字幕的匹配口径（Web：subtitleId 相同 || 文本相同且起点差 < 0.5s） */
+private fun matchesRecord(sub: Subtitle, record: SpeechPracticeRecord): Boolean =
+    record.subtitleId == sub.id ||
+        (record.targetText == sub.textEn && kotlin.math.abs(record.targetStartTime - sub.start) < 0.5)
+
+/**
+ * 语音评测状态机：加载练习数据 → 句子过滤/切换 → 录音（16kHz WAV）→ 评测 → 结果/回放。
+ * 页面内音频（AI 朗读/原声/慢速/录音回放/词级四路）统一由单个 MediaPlayer 互斥管理。
+ */
+@HiltViewModel
+class SpeechEvalViewModel @Inject constructor(
+    private val speechRepository: SpeechRepository,
+    private val contentRepository: ContentRepository,
+    private val practiceSettingsStore: PracticeSettingsStore,
+    private val appSettingsStore: SettingsStore,
+    @ApplicationContext private val appContext: Context
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(SpeechEvalUiState())
+    val uiState: StateFlow<SpeechEvalUiState> = _uiState.asStateFlow()
+
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast.asStateFlow()
+    fun consumeToast() { _toast.value = null }
+
+    private var episodeId: String = ""
+
+    private var recorder: WavRecorder? = null
+    private var player: MediaPlayer? = null
+    private var monitorJob: Job? = null
+    private var advanceJob: Job? = null
+
+    init {
+        practiceSettingsStore.settingsFlow
+            .onEach { settings ->
+                _uiState.update { state ->
+                    val filtered = if (allSubtitles.isEmpty()) state.subtitles
+                    else applyFilters(allSubtitles, state.records, settings)
+                    state.copy(
+                        settings = settings,
+                        subtitles = filtered,
+                        index = state.index.coerceIn(0, filtered.lastIndex.coerceAtLeast(0))
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+        appSettingsStore.themeModeFlow
+            .onEach { mode -> _uiState.update { it.copy(themeMode = mode) } }
+            .launchIn(viewModelScope)
+    }
+
+    /** 全量字幕的内存副本（过滤时用；loaded 后与 records 一起构成过滤输入） */
+    private var allSubtitles: List<Subtitle> = emptyList()
+
+    // ---------- 数据加载 ----------
+
+    fun load(episodeId: String) {
+        if (this.episodeId == episodeId && _uiState.value.subtitles.isNotEmpty()) return
+        this.episodeId = episodeId
+        _uiState.update { SpeechEvalUiState(settings = it.settings, themeMode = it.themeMode) }
+        viewModelScope.launch {
+            when (val result = speechRepository.getPracticeData(episodeId)) {
+                is Result.Success -> {
+                    allSubtitles = result.data.subtitles
+                    _uiState.update { state ->
+                        val filtered = applyFilters(result.data.subtitles, result.data.records, state.settings)
+                        state.copy(
+                            isLoading = false,
+                            audioUrl = result.data.audioUrl,
+                            subtitles = filtered,
+                            index = 0,
+                            records = result.data.records,
+                            isTrialMode = result.data.isTrialMode
+                        )
+                    }
+                }
+                is Result.Error -> _uiState.update {
+                    it.copy(isLoading = false, loadError = result.message)
+                }
+                Result.NetworkError -> _uiState.update {
+                    it.copy(isLoading = false, loadError = "网络连接失败")
+                }
+            }
+        }
+    }
+
+    fun retry() { load(episodeId) }
+
+    /** Web ImmersiveSpeechPractice 的过滤口径：词数区间 + 只练未掌握 */
+    private fun applyFilters(
+        all: List<Subtitle>,
+        records: List<SpeechPracticeRecord>,
+        settings: PracticeSettings
+    ): List<Subtitle> = all.filter { sub ->
+        val wordCount = countWords(sub.textEn)
+        if (wordCount < settings.minWords) return@filter false
+        if (settings.maxWords < 50 && wordCount > settings.maxWords) return@filter false
+        if (settings.onlyUnmastered) {
+            val latest = latestRecordFor(sub, records)
+            if (latest != null && latest.bestScore >= settings.effectivePassThreshold) return@filter false
+        }
+        true
+    }
+
+    /** 匹配该句的最新一次记录（recognitionid 自增，取最大即最新） */
+    private fun latestRecordFor(sub: Subtitle, records: List<SpeechPracticeRecord>): SpeechPracticeRecord? =
+        records.filter { matchesRecord(sub, it) }.maxByOrNull { it.recognitionid }
+
+    private fun countWords(text: String): Int = text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
+
+    // ---------- 设置 ----------
+
+    fun updateSettings(transform: (PracticeSettings) -> PracticeSettings) {
+        viewModelScope.launch { practiceSettingsStore.update(transform) }
+    }
+
+    /** 设置面板深浅色切换：直接写全局主题偏好（与 Web next-themes 联动一致） */
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { appSettingsStore.setThemeMode(mode) }
+    }
+
+    // ---------- 句子切换 ----------
+
+    fun prev() { switchSentence(_uiState.value.index - 1) }
+    fun next() { switchSentence(_uiState.value.index + 1) }
+    fun selectSentence(index: Int) { switchSentence(index) }
+
+    private fun switchSentence(index: Int) {
+        val state = _uiState.value
+        if (index < 0 || index > state.subtitles.lastIndex || index == state.index) return
+        stopPlayback()
+        advanceJob?.cancel()
+        // 音标缓存按词复用，跨句保留
+        _uiState.update {
+            it.copy(
+                index = index,
+                phase = EvalPhase.IDLE,
+                result = null,
+                selectedWordIndex = null,
+                amplitudes = emptyList(),
+                blindRevealed = false
+            )
+        }
+        prefetchIpa(state.subtitles[index])
+    }
+
+    // ---------- 字幕音标（IPA 文本模式） ----------
+
+    /** 预取当前句（或指定句）的逐词音标；字幕区切到音标模式时由 UI 触发，静默失败 */
+    fun prefetchIpa(subtitle: Subtitle? = null) {
+        val sub = subtitle ?: _uiState.value.current ?: return
+        if (_uiState.value.settings.textMode != com.wxkzd.yuanlu.domain.model.PracticeTextMode.IPA) return
+        val missing = wordsOf(sub.textEn).filter { it.lowercase() !in _uiState.value.ipaCache }
+        missing.take(6).forEach { word ->
+            viewModelScope.launch {
+                when (val r = contentRepository.lookupWord(cleanWord(word))) {
+                    is Result.Success -> r.data.phoneticsUs?.let { ipa ->
+                        _uiState.update { it.copy(ipaCache = it.ipaCache + (word.lowercase() to ipa)) }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    private fun wordsOf(text: String): List<String> = text.split(Regex("[\\s]+")).filter { it.any { c -> c.isLetter() } }
+
+    private fun cleanWord(word: String): String = word.trim { !it.isLetter() && it != '\'' }
+
+    // ---------- 录音与评测 ----------
+
+    /** 开始录音（UI 层已确保 RECORD_AUDIO 授权） */
+    fun startRecording() {
+        if (_uiState.value.phase == EvalPhase.RECORDING || _uiState.value.phase == EvalPhase.EVALUATING) return
+        stopPlayback()
+        advanceJob?.cancel()
+        val rec = WavRecorder { amplitude ->
+            _uiState.update { state ->
+                state.copy(amplitudes = (state.amplitudes + amplitude).takeLast(28))
+            }
+        }
+        if (!rec.start()) {
+            _toast.value = "无法启动麦克风，请检查权限设置"
+            return
+        }
+        recorder = rec
+        _uiState.update {
+            it.copy(phase = EvalPhase.RECORDING, result = null, selectedWordIndex = null, amplitudes = emptyList())
+        }
+    }
+
+    /** 停止录音并提交评测（Web stopRecording：WAV → base64 → evaluate） */
+    fun stopAndEvaluate() {
+        val rec = recorder ?: return
+        recorder = null
+        _uiState.update { it.copy(phase = EvalPhase.EVALUATING, amplitudes = emptyList()) }
+        viewModelScope.launch {
+            val wav = withContext(Dispatchers.IO) { rec.stop() }
+            if (wav == null) {
+                _uiState.update { it.copy(phase = EvalPhase.IDLE) }
+                _toast.value = "录音太短，请重试"
+                return@launch
+            }
+            val state = _uiState.value
+            val sub = state.current ?: run {
+                _uiState.update { it.copy(phase = EvalPhase.IDLE) }
+                return@launch
+            }
+            // 本地录音落盘，供"回放我的发音/我"的词切片播放
+            val localPath = withContext(Dispatchers.IO) {
+                runCatching {
+                    File(appContext.cacheDir, "speech_${System.currentTimeMillis()}.wav")
+                        .apply { writeBytes(wav) }
+                        .absolutePath
+                }.getOrNull()
+            }
+            when (val r = speechRepository.evaluate(episodeId, sub.id, sub.textEn, wav)) {
+                is Result.Success -> {
+                    val evaluated = r.data.copy(userAudioPath = localPath)
+                    val newRecord = SpeechPracticeRecord(
+                        recognitionid = evaluated.recognitionId ?: System.currentTimeMillis(),
+                        accuracyScore = evaluated.pronunciation,
+                        overallScore = evaluated.overallScore,
+                        fluencyScore = evaluated.fluency,
+                        integrityScore = evaluated.integrity,
+                        speed = evaluated.speed,
+                        targetText = sub.textEn,
+                        targetStartTime = sub.start.toInt(),
+                        subtitleId = sub.id,
+                        recognitionDate = ""
+                    )
+                    _uiState.update {
+                        it.copy(
+                            phase = EvalPhase.RESULT,
+                            result = evaluated,
+                            selectedWordIndex = null,
+                            // 盲读模式：新一轮评测结果产出即揭示原文对照（Web 同口径）
+                            blindRevealed = true,
+                            records = it.records + newRecord
+                        )
+                    }
+                    maybeAutoAdvance(evaluated.overallScore)
+                }
+                is Result.Error -> {
+                    _uiState.update { it.copy(phase = EvalPhase.IDLE) }
+                    _toast.value = r.message
+                }
+                Result.NetworkError -> {
+                    _uiState.update { it.copy(phase = EvalPhase.IDLE) }
+                    _toast.value = "网络连接失败，请重试"
+                }
+            }
+        }
+    }
+
+    /** 自动跳下一句（Web：达标后 1.5s） */
+    private fun maybeAutoAdvance(score: Int) {
+        val state = _uiState.value
+        if (!state.settings.autoAdvance || score < state.effectiveThreshold) return
+        advanceJob?.cancel()
+        advanceJob = viewModelScope.launch {
+            delay(1500)
+            next()
+        }
+    }
+
+    fun retryRecording() {
+        advanceJob?.cancel()
+        _uiState.update { it.copy(phase = EvalPhase.IDLE, result = null, selectedWordIndex = null) }
+    }
+
+    // ---------- 结果区交互 ----------
+
+    /** 点词展开音素诊断（Web：<85 分的词可点） */
+    fun selectWord(index: Int?) {
+        _uiState.update { it.copy(selectedWordIndex = index) }
+    }
+
+    /** 盲读模式"显示原文/重新遮挡"手动切换（Web setBlindRevealed） */
+    fun toggleBlindReveal() {
+        _uiState.update { it.copy(blindRevealed = !it.blindRevealed) }
+    }
+
+    /**
+     * 查看当前句最近一次历史得分（顶部操作栏"最近得分"入口）：
+     * 由记录构建仅含分数维度的结果并翻转到结果面；历史记录无逐词明细与录音。
+     */
+    fun showLatestScore() {
+        val state = _uiState.value
+        if (state.phase == EvalPhase.RECORDING || state.phase == EvalPhase.EVALUATING) return
+        val record = state.latestRecord ?: return
+        stopPlayback()
+        advanceJob?.cancel()
+        _uiState.update {
+            it.copy(
+                phase = EvalPhase.RESULT,
+                result = SpeechEvalResult(
+                    overallScore = record.bestScore,
+                    pronunciation = record.accuracyScore,
+                    fluency = record.fluencyScore ?: record.accuracyScore,
+                    integrity = record.integrityScore ?: record.accuracyScore,
+                    speed = record.speed ?: 0,
+                    words = emptyList()
+                ),
+                selectedWordIndex = null
+            )
+        }
+    }
+
+    // ---------- 播放（单一 MediaPlayer 互斥） ----------
+
+    fun toggleAiReading() {
+        val state = _uiState.value
+        if (state.playing == PlaybackKind.AI) { stopPlayback(); return }
+        val text = state.current?.textEn ?: return
+        viewModelScope.launch {
+            when (val r = contentRepository.fetchTtsAudioUrl(text)) {
+                is Result.Success -> playUrl(r.data, PlaybackKind.AI)
+                is Result.Error -> _toast.value = r.message
+                Result.NetworkError -> _toast.value = "网络连接失败"
+            }
+        }
+    }
+
+    /** 原声片段播放（speed 1.0 / 0.75 慢速），起点优先词级时间戳 */
+    fun playOriginal(speed: Float) {
+        val state = _uiState.value
+        val kind = if (speed < 1f) PlaybackKind.SLOW else PlaybackKind.ORIGINAL
+        if (state.playing == kind) { stopPlayback(); return }
+        val url = state.audioUrl
+        val sub = state.current
+        if (url.isNullOrBlank() || sub == null) {
+            _toast.value = "原声音频不可用"
+            return
+        }
+        val startSec = sub.words?.firstOrNull()?.start ?: sub.start
+        val endSec = sub.words?.lastOrNull()?.end ?: sub.end
+        playUrl(
+            url, kind,
+            startMs = (startSec * 1000).toInt(),
+            endMs = (endSec * 1000).toInt(),
+            speed = speed
+        )
+    }
+
+    /** 回放我的发音（可只放词切片：startSec/endSec 为相对录音秒） */
+    fun playUserAudio(startSec: Double? = null, endSec: Double? = null) {
+        val state = _uiState.value
+        if (state.playing == PlaybackKind.USER || state.playing == PlaybackKind.WORD_ME) { stopPlayback(); return }
+        val path = state.result?.userAudioPath
+        if (path == null) {
+            _toast.value = "暂无录音可回放"
+            return
+        }
+        playUrl(
+            File(path).toURI().toString(), PlaybackKind.USER,
+            startMs = startSec?.let { (it * 1000).toInt() },
+            endMs = endSec?.let { (it * 1000).toInt() }
+        )
+    }
+
+    /** 有道词典发音（type 2=美音 1=英音，Web playDictAudio 同源） */
+    fun playDictVoice(word: String, us: Boolean) {
+        val kind = if (us) PlaybackKind.WORD_US else PlaybackKind.WORD_UK
+        if (_uiState.value.playing == kind) { stopPlayback(); return }
+        val url = "https://dict.youdao.com/dictvoice?audio=${android.net.Uri.encode(word)}&type=${if (us) 2 else 1}"
+        playUrl(url, kind)
+    }
+
+    /** 词级原声：在字幕词级时间戳中定位选中词的绝对区间 */
+    fun playWordOriginal(word: String) {
+        val state = _uiState.value
+        if (state.playing == PlaybackKind.WORD_ORIGINAL) { stopPlayback(); return }
+        val url = state.audioUrl
+        val words = state.current?.words
+        if (url.isNullOrBlank() || words.isNullOrEmpty()) {
+            _toast.value = "该句无词级时间戳"
+            return
+        }
+        val target = cleanWord(word).lowercase()
+        val hit = words.firstOrNull { cleanWord(it.word).lowercase() == target }
+            ?: words.minByOrNull { cheapDistance(it.word.lowercase(), target) }
+        if (hit == null) {
+            _toast.value = "原声中未找到该词"
+            return
+        }
+        playUrl(url, PlaybackKind.WORD_ORIGINAL, (hit.start * 1000).toInt(), (hit.end * 1000).toInt())
+    }
+
+    /** 词级"我"：回放录音中该词的切片 */
+    fun playWordMe(wordIndex: Int) {
+        val state = _uiState.value
+        if (state.playing == PlaybackKind.WORD_ME) { stopPlayback(); return }
+        val w = state.result?.words?.getOrNull(wordIndex) ?: return
+        if (w.start == null || w.end == null) {
+            _toast.value = "该词无切片时间"
+            return
+        }
+        val path = state.result?.userAudioPath
+        if (path == null) {
+            _toast.value = "暂无录音可回放"
+            return
+        }
+        playUrl(
+            File(path).toURI().toString(), PlaybackKind.WORD_ME,
+            (w.start!! * 1000).toInt(), (w.end!! * 1000).toInt()
+        )
+    }
+
+    /** 轻量相似度（非精确编辑距离，仅用于词级原声的模糊兜底匹配） */
+    private fun cheapDistance(a: String, b: String): Int {
+        if (a == b) return 0
+        return kotlin.math.abs(a.length - b.length) + a.count { it !in b }
+    }
+
+    private fun playUrl(
+        url: String,
+        kind: PlaybackKind,
+        startMs: Int? = null,
+        endMs: Int? = null,
+        speed: Float = 1f
+    ) {
+        stopPlayback()
+        val mp = MediaPlayer()
+        player = mp
+        try {
+            mp.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .build()
+            )
+            mp.setDataSource(url)
+            mp.setOnPreparedListener {
+                if (!viewModelScope.isActive) return@setOnPreparedListener
+                if (startMs != null && startMs > 0) mp.seekTo(startMs)
+                if (speed != 1f) {
+                    runCatching { mp.playbackParams = mp.playbackParams.setSpeed(speed) }
+                }
+                mp.start()
+                _uiState.update { s -> s.copy(playing = kind) }
+                monitorJob = viewModelScope.launch {
+                    while (isActive) {
+                        delay(50)
+                        if (!mp.isPlaying) break
+                        if (endMs != null && mp.currentPosition >= endMs) {
+                            runCatching { mp.stop() }
+                            break
+                        }
+                    }
+                    _uiState.update { s -> if (s.playing == kind) s.copy(playing = PlaybackKind.NONE) else s }
+                }
+            }
+            mp.setOnCompletionListener {
+                _uiState.update { s -> if (s.playing == kind) s.copy(playing = PlaybackKind.NONE) else s }
+            }
+            mp.setOnErrorListener { _, _, _ ->
+                _uiState.update { s -> if (s.playing == kind) s.copy(playing = PlaybackKind.NONE) else s }
+                true
+            }
+            mp.prepareAsync()
+        } catch (_: Exception) {
+            mp.release()
+            if (player === mp) player = null
+            _toast.value = "音频播放失败"
+        }
+    }
+
+    fun stopPlayback() {
+        monitorJob?.cancel()
+        monitorJob = null
+        player?.let { mp ->
+            runCatching {
+                if (mp.isPlaying) mp.stop()
+                mp.release()
+            }
+        }
+        player = null
+        _uiState.update { if (it.playing != PlaybackKind.NONE) it.copy(playing = PlaybackKind.NONE) else it }
+    }
+
+    override fun onCleared() {
+        recorder?.release()
+        recorder = null
+        monitorJob?.cancel()
+        advanceJob?.cancel()
+        player?.let { runCatching { it.release() } }
+        player = null
+        super.onCleared()
+    }
+}

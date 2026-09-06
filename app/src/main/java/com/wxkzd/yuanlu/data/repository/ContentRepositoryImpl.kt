@@ -113,6 +113,12 @@ class ContentRepositoryImpl @Inject constructor(
             ?: throw IOException("翻译失败，请稍后重试")
     }
 
+    override suspend fun fetchTtsAudioUrl(text: String): Result<String> = call {
+        val response = api.translate(TranslateRequestDto(text))
+        response.speakUrl?.takeIf { it.isNotBlank() }
+            ?: throw IOException("朗读音频获取失败，请稍后重试")
+    }
+
     /** 平铺评论 → 根评论（倒序）+ replies 挂载，对齐 Web 端 buildCommentTree */
     private fun List<Comment>.buildCommentTree(): List<Comment> {
         val byId = mutableMapOf<Int, Comment>()

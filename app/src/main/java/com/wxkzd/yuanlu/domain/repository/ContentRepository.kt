@@ -59,6 +59,9 @@ interface ContentRepository {
     /** 有道文本翻译（需登录，有每日配额） */
     suspend fun translate(text: String): Result<String>
 
+    /** 有道 TTS 朗读音频地址（api/dictionary/youdao 的 speakUrl；语音评测 AI 朗读用） */
+    suspend fun fetchTtsAudioUrl(text: String): Result<String>
+
     // ---------- 词典与生词（精听查词） ----------
 
     /** 查词典（GET api/dict/{word}）；配额用尽/未登录等以 Result.Error 返回 */

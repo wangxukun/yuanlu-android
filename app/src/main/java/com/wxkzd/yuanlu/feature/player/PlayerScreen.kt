@@ -132,6 +132,7 @@ fun PlayerRoute(
     onLogin: () -> Unit,
     onOpenPodcast: (String) -> Unit,
     onOpenEpisode: (String) -> Unit,
+    onOpenSpeechEval: (String) -> Unit,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     LaunchedEffect(episodeid) {
@@ -142,6 +143,7 @@ fun PlayerRoute(
         onLogin = onLogin,
         onOpenPodcast = onOpenPodcast,
         onOpenEpisode = onOpenEpisode,
+        onOpenSpeechEval = onOpenSpeechEval,
         viewModel = viewModel
     )
 }
@@ -153,6 +155,7 @@ fun PlayerScreen(
     onLogin: () -> Unit,
     onOpenPodcast: (String) -> Unit,
     onOpenEpisode: (String) -> Unit,
+    onOpenSpeechEval: (String) -> Unit,
     viewModel: PlayerViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -192,6 +195,7 @@ fun PlayerScreen(
                     onLogin = onLogin,
                     onOpenPodcast = onOpenPodcast,
                     onOpenEpisode = onOpenEpisode,
+                    onOpenSpeechEval = onOpenSpeechEval,
                     onTogglePlayback = viewModel::togglePlayback,
                     onStartListening = viewModel::startIntensiveListening,
                     onOpenTranscript = { viewModel.setTranscriptOpen(true) },
@@ -237,6 +241,7 @@ private fun EpisodeDetailContent(
     onLogin: () -> Unit,
     onOpenPodcast: (String) -> Unit,
     onOpenEpisode: (String) -> Unit,
+    onOpenSpeechEval: (String) -> Unit,
     onTogglePlayback: () -> Unit,
     onStartListening: () -> Unit,
     onOpenTranscript: () -> Unit,
@@ -480,12 +485,12 @@ private fun EpisodeDetailContent(
                 isLocked = isLocked,
                 isFavorited = episode.isFavorited,
                 onListening = { handlePlayTap(listen = true) },
-                // 语音评测（对齐 Web handleStartPractice）：游客→登录引导；专属+非会员→升级提示；其余开放
+                // 语音评测（对齐 Web handleStartPractice）：游客→登录引导；专属+非会员→升级提示；其余进入评测页
                 onPractice = {
                     when {
                         !state.isLoggedIn -> onLogin()
                         isLocked -> Toast.makeText(context, "语音评测仅对会员开放，升级会员即可解锁", Toast.LENGTH_SHORT).show()
-                        else -> Toast.makeText(context, "语音评测即将上线", Toast.LENGTH_SHORT).show()
+                        else -> onOpenSpeechEval(episode.episodeid)
                     }
                 },
                 // 音频下载（对齐 Web handleDownloadAudio）：游客/非会员给权限提示，会员提示功能排期

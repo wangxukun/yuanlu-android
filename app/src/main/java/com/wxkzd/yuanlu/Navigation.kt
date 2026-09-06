@@ -41,6 +41,7 @@ import com.wxkzd.yuanlu.feature.player.PlayerShellViewModel
 import com.wxkzd.yuanlu.feature.podcast.PodcastDetailRoute
 import com.wxkzd.yuanlu.feature.profile.PersonalCenterRoute
 import com.wxkzd.yuanlu.feature.profile.UserProfileViewModel
+import com.wxkzd.yuanlu.feature.voice.SpeechEvalRoute
 import com.wxkzd.yuanlu.feature.vocabulary.VocabularyReviewScreen
 import com.wxkzd.yuanlu.feature.vocabulary.VocabularyViewModel
 import com.wxkzd.yuanlu.theme.ThemeMode
@@ -173,7 +174,15 @@ private fun AppNavHost(
                         onBack = { back() },
                         onLogin = onLogin,
                         onOpenPodcast = { open(PodcastDetailNav(it)) },
-                        onOpenEpisode = { open(PlayerNav(it)) }
+                        onOpenEpisode = { open(PlayerNav(it)) },
+                        onOpenSpeechEval = { open(SpeechEvalNav(it)) }
+                    )
+                }
+                // 语音评测：剧集详情「语音评测」按钮进入（复刻 Web ImmersiveSpeechPractice）
+                entry<SpeechEvalNav> { key ->
+                    SpeechEvalRoute(
+                        episodeid = key.episodeid,
+                        onBack = { back() }
                     )
                 }
                 // 精听页：全屏播放器「精听模式」按钮携带进度进入

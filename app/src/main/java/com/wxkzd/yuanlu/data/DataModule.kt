@@ -5,10 +5,13 @@ import com.wxkzd.yuanlu.core.media.PlayerController
 import com.wxkzd.yuanlu.core.media.ProgressReporter
 import com.wxkzd.yuanlu.data.remote.AuthApi
 import com.wxkzd.yuanlu.data.remote.ContentApi
+import com.wxkzd.yuanlu.data.remote.SpeechApi
 import com.wxkzd.yuanlu.data.repository.AuthRepositoryImpl
 import com.wxkzd.yuanlu.data.repository.ContentRepositoryImpl
+import com.wxkzd.yuanlu.data.repository.SpeechRepositoryImpl
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
+import com.wxkzd.yuanlu.domain.repository.SpeechRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -48,6 +51,18 @@ object DataModule {
     @Singleton
     fun provideContentRepository(api: ContentApi): ContentRepository {
         return ContentRepositoryImpl(api)
+    }
+
+    @Provides
+    @Singleton
+    fun provideSpeechApi(retrofit: Retrofit): SpeechApi {
+        return retrofit.create(SpeechApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideSpeechRepository(api: SpeechApi): SpeechRepository {
+        return SpeechRepositoryImpl(api)
     }
 
     /** 应用级进度上报器：观察全局播放状态流，防抖上报 listening_history */

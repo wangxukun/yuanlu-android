@@ -25,3 +25,6 @@ import kotlinx.serialization.Serializable
 
 /** 个人中心（旅程数据/里程碑/最近听过/账号与安全），需登录 */
 @Serializable data object PersonalCenterNav : NavKey
+
+/** 语音评测：由剧集详情「语音评测」按钮进入，携带当前 episodeId */
+@Serializable data class SpeechEvalNav(val episodeid: String) : NavKey
