@@ -286,3 +286,56 @@ data class HistoryPage(
     val hasMore: Boolean = false
 )
 
+// ---------- 学习路径（对齐 Web core/learning-path，列表/详情/剧集搜索） ----------
+
+/** 学习路径卡片摘要（「我的集合」与「发现」共用） */
+data class LearningPathSummary(
+    val pathid: Int,
+    val pathName: String,
+    val description: String? = null,
+    /** 第一集封面（签名 URL）；空路径为 null，UI 回退标题首字母占位 */
+    val coverUrl: String? = null,
+    val isPublic: Boolean = false,
+    val itemCount: Int = 0,
+    val creatorName: String = "",
+    val creationAt: String? = null,
+    /** 已听完集数占比 0..100（服务端按 listening_history 聚合） */
+    val progress: Int = 0,
+    val isOfficial: Boolean = false
+)
+
+/** 路径内的一条剧集（itemId = learning_path_items.id，拥有者移除时用） */
+data class LearningPathEpisode(
+    val itemId: Int,
+    val order: Int = 0,
+    /** 剧集快照：封面/音频签名 URL + 当前用户收听态（progressSeconds/isFinished） */
+    val episode: Episode
+)
+
+/** 学习路径详情 */
+data class LearningPathDetail(
+    val pathid: Int,
+    val pathName: String,
+    val description: String? = null,
+    /** 第一集封面签名 URL（无剧集为 null） */
+    val coverUrl: String? = null,
+    val isPublic: Boolean = false,
+    /** 创建者 userid（仓库层与当前登录用户比对得出 isOwner） */
+    val userid: String? = null,
+    val creatorName: String = "",
+    val creationAt: String? = null,
+    val items: List<LearningPathEpisode> = emptyList(),
+    /** 当前登录用户是否拥有者：驱动 添加剧集/编辑/删除/移除剧集 的条件渲染 */
+    val isOwner: Boolean = false
+)
+
+/** 添加剧集弹窗的搜索结果（对齐 Web searchEpisodesAction） */
+data class PathEpisodeSearchItem(
+    val episodeid: String,
+    val title: String,
+    val thumbnailUrl: String? = null,
+    /** 所属播客名 */
+    val author: String = "",
+    val duration: Int = 0
+)
+

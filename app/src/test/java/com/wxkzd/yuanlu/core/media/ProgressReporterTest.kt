@@ -232,4 +232,15 @@ private class RecordingRepository : ContentRepository {
     override suspend fun checkEpisodeFavorite(episodeid: String): Result<Boolean> = error("unused")
     override suspend fun addEpisodeFavorite(episodeid: String): Result<Unit> = error("unused")
     override suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit> = error("unused")
+
+    // 学习路径：本测试不涉及
+    override suspend fun getMyLearningPaths(): Result<List<com.wxkzd.yuanlu.domain.model.LearningPathSummary>> = error("unused")
+    override suspend fun getPublicLearningPaths(): Result<List<com.wxkzd.yuanlu.domain.model.LearningPathSummary>> = error("unused")
+    override suspend fun createLearningPath(pathName: String, description: String?, isPublic: Boolean): Result<Unit> = error("unused")
+    override suspend fun getLearningPath(pathid: Int): Result<com.wxkzd.yuanlu.domain.model.LearningPathDetail> = error("unused")
+    override suspend fun updateLearningPath(pathid: Int, pathName: String, description: String?, isPublic: Boolean): Result<Unit> = error("unused")
+    override suspend fun deleteLearningPath(pathid: Int): Result<Unit> = error("unused")
+    override suspend fun addEpisodeToLearningPath(pathid: Int, episodeid: String): Result<Unit> = error("unused")
+    override suspend fun removeEpisodeFromLearningPath(pathid: Int, itemId: Int): Result<Unit> = error("unused")
+    override suspend fun searchEpisodesForPath(query: String): Result<List<com.wxkzd.yuanlu.domain.model.PathEpisodeSearchItem>> = error("unused")
 }

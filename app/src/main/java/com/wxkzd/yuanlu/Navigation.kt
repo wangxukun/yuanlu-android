@@ -37,6 +37,8 @@ import com.wxkzd.yuanlu.feature.discover.ChannelListRoute
 import com.wxkzd.yuanlu.feature.favorites.FavoritesRoute
 import com.wxkzd.yuanlu.feature.history.HistoryRoute
 import com.wxkzd.yuanlu.feature.intensive.IntensiveListeningRoute
+import com.wxkzd.yuanlu.feature.learningpath.LearningPathDetailRoute
+import com.wxkzd.yuanlu.feature.learningpath.LearningPathsRoute
 import com.wxkzd.yuanlu.feature.player.FullScreenPlayerScreen
 import com.wxkzd.yuanlu.feature.player.MiniPlayerBar
 import com.wxkzd.yuanlu.feature.player.PlayerRoute
@@ -151,7 +153,8 @@ private fun AppNavHost(
                         selectedTab = mainSelectedTab,
                         onSelectTab = { mainSelectedTab = it },
                         onOpenFavorites = { open(FavoritesNav) },
-                        onOpenListeningHistory = { open(ListeningHistoryNav) }
+                        onOpenListeningHistory = { open(ListeningHistoryNav) },
+                        onOpenLearningPaths = { open(LearningPathsNav) }
                     )
                 }
                 // 个人中心：复刻 Web /auth/personal-center（旅程数据/里程碑/账号与安全）
@@ -177,6 +180,21 @@ private fun AppNavHost(
                 // 收听历史：复刻 Web /library/history（过滤/时间分组/继续播放）
                 entry<ListeningHistoryNav> {
                     HistoryRoute(
+                        onBack = { back() },
+                        onOpenEpisode = { open(PlayerNav(it)) }
+                    )
+                }
+                // 学习路径：复刻 Web /library/learning-paths（我的集合/发现双 Tab + 创建）
+                entry<LearningPathsNav> {
+                    LearningPathsRoute(
+                        onBack = { back() },
+                        onOpenPath = { open(LearningPathDetailNav(it)) }
+                    )
+                }
+                // 学习路径详情：播放全部/剧集清单；拥有者可编辑/删除/添加/移除剧集
+                entry<LearningPathDetailNav> { key ->
+                    LearningPathDetailRoute(
+                        pathId = key.pathId,
                         onBack = { back() },
                         onOpenEpisode = { open(PlayerNav(it)) }
                     )

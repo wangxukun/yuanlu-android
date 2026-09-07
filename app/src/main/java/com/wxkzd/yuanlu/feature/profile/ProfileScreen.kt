@@ -72,7 +72,8 @@ fun ProfileScreen(
     userProfileViewModel: UserProfileViewModel,
     onOpenPersonalCenter: () -> Unit,
     onOpenFavorites: () -> Unit = {},
-    onOpenListeningHistory: () -> Unit = {}
+    onOpenListeningHistory: () -> Unit = {},
+    onOpenLearningPaths: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val userCenterState by userProfileViewModel.uiState.collectAsStateWithLifecycle()
@@ -117,7 +118,7 @@ fun ProfileScreen(
             if (isLoggedIn) {
                 MenuCard(title = "学习与记录") {
                     MenuRow("发音弱项本", Icons.Filled.Mic, MaterialTheme.colorScheme.tertiary) { comingSoon("发音弱项本") }
-                    MenuRow("学习路径", Icons.Filled.School, MaterialTheme.colorScheme.primary) { comingSoon("学习路径") }
+                    MenuRow("学习路径", Icons.Filled.School, MaterialTheme.colorScheme.primary) { onOpenLearningPaths() }
                     MenuRow("收听历史", Icons.Filled.History, MaterialTheme.colorScheme.secondary) { onOpenListeningHistory() }
                     MenuRow("我的收藏", Icons.Filled.Bookmark, Color(0xFFB96F0F)) { onOpenFavorites() }
                 }

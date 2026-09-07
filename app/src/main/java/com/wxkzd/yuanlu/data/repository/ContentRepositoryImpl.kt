@@ -7,6 +7,9 @@ import com.wxkzd.yuanlu.data.remote.ContentApi
 import com.wxkzd.yuanlu.data.remote.dto.CommentDto
 import com.wxkzd.yuanlu.data.remote.dto.CreateCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.FavoriteMutationDto
+import com.wxkzd.yuanlu.data.remote.dto.AddEpisodeToPathRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.LearningPathMutationResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.LearningPathUpsertRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyAddRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyDeleteRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.VocabularyReviewRequestDto
@@ -22,6 +25,9 @@ import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
 import com.wxkzd.yuanlu.domain.model.FavoritesBundle
 import com.wxkzd.yuanlu.domain.model.HistoryPage
+import com.wxkzd.yuanlu.domain.model.LearningPathDetail
+import com.wxkzd.yuanlu.domain.model.LearningPathSummary
+import com.wxkzd.yuanlu.domain.model.PathEpisodeSearchItem
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
@@ -413,6 +419,111 @@ class ContentRepositoryImpl @Inject constructor(
             throw IOException(response.message ?: "收听历史加载失败")
         }
         data.toDomain()
+    }
+    // ---------- 学习路径 ----------
+
+    override suspend fun getMyLearningPaths(): Result<List<LearningPathSummary>> = call {
+        val response = api.myLearningPaths()
+        if (!response.success) {
+            throw IOException(response.message ?: "学习路径加载失败")
+        }
+        response.data.map { it.toDomain() }
+    }
+
+    override suspend fun getPublicLearningPaths(): Result<List<LearningPathSummary>> = call {
+        val response = api.publicLearningPaths()
+        if (!response.success) {
+            throw IOException(response.message ?: "公开路径加载失败")
+        }
+        response.data.map { it.toDomain() }
+    }
+
+    override suspend fun createLearningPath(
+        pathName: String,
+        description: String?,
+        isPublic: Boolean
+    ): Result<Unit> = callPathMutation {
+        api.createLearningPath(
+            LearningPathUpsertRequestDto(
+                pathName = pathName,
+                description = description?.takeIf { it.isNotBlank() },
+                isPublic = isPublic
+            )
+        )
+    }
+
+    override suspend fun getLearningPath(pathid: Int): Result<LearningPathDetail> = call {
+        val response = api.learningPathDetail(pathid)
+        val data = response.data
+        if (!response.success || data == null) {
+            throw IOException(response.message ?: "路径详情加载失败")
+        }
+        // isOwner = 创建者与当前登录用户比对（对齐 Web selectedPath.userid === currentUserId）
+        val currentUserId = tokenStore.getUserid()
+        data.toDomain(isOwner = !data.userid.isNullOrEmpty() && data.userid == currentUserId)
+    }
+
+    override suspend fun updateLearningPath(
+        pathid: Int,
+        pathName: String,
+        description: String?,
+        isPublic: Boolean
+    ): Result<Unit> = callPathMutation {
+        api.updateLearningPath(
+            pathid,
+            LearningPathUpsertRequestDto(
+                pathName = pathName,
+                description = description?.takeIf { it.isNotBlank() },
+                isPublic = isPublic
+            )
+        )
+    }
+
+    override suspend fun deleteLearningPath(pathid: Int): Result<Unit> =
+        callPathMutation { api.deleteLearningPath(pathid) }
+
+    override suspend fun addEpisodeToLearningPath(pathid: Int, episodeid: String): Result<Unit> =
+        callPathMutation { api.addEpisodeToPath(pathid, AddEpisodeToPathRequestDto(episodeid)) }
+
+    override suspend fun removeEpisodeFromLearningPath(pathid: Int, itemId: Int): Result<Unit> =
+        callPathMutation { api.removeEpisodeFromPath(pathid, itemId) }
+
+    override suspend fun searchEpisodesForPath(query: String): Result<List<PathEpisodeSearchItem>> =
+        call {
+            val response = api.searchEpisodesForPath(query)
+            if (!response.success) {
+                throw IOException(response.message ?: "剧集搜索失败")
+            }
+            response.data.map { it.toDomain() }
+        }
+
+    /**
+     * 学习路径变更类端点统一走信封 { success, message }：
+     * 业务失败（success=false）转 Error；不复用 [call]——其 403 文案是翻译配额专用的。
+     */
+    private suspend fun callPathMutation(
+        block: suspend () -> LearningPathMutationResponseDto
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val response = block()
+            if (response.success) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(600, response.message ?: "操作失败")
+            }
+        } catch (e: IOException) {
+            Result.NetworkError
+        } catch (e: HttpException) {
+            val message = when (e.code()) {
+                401 -> "请先登录"
+                403 -> "无权操作该路径"
+                404 -> "路径不存在或已被删除"
+                else -> "请求失败（${e.code()}）"
+            }
+            Result.Error(e.code(), message)
+        } catch (e: Exception) {
+            Result.Error(600, e.message ?: "Unexpected error")
+        }
     }
 
 

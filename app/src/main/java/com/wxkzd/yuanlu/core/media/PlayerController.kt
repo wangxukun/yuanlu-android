@@ -24,6 +24,9 @@ class PlayerController @Inject constructor(
     private var progressJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    /** playAll 入队的剧集快照（mediaId → Episode），自动续播时同步 currentEpisode 用 */
+    private var queue: List<Episode> = emptyList()
+
     init {
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -51,6 +54,26 @@ class PlayerController @Inject constructor(
             override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
                 _playerState.update { it.copy(playbackRate = playbackParameters.speed) }
             }
+
+            /**
+             * 队列自动续播（播放全部）：mediaId 切换时同步 currentEpisode/进度/时长，
+             * 迷你条与全屏播放器随之切换到新剧集；ProgressReporter 借 episodeid 变化
+             * 冲刷上一集最终进度。仅自动切换（AUTO）结算「按集数」定时关闭。
+             */
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val mediaId = mediaItem?.mediaId ?: return
+                val episode = queue.firstOrNull { it.episodeid == mediaId } ?: return
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    handleSleepOnEpisodeEnded()
+                }
+                _playerState.update {
+                    it.copy(
+                        currentEpisode = episode,
+                        currentPosition = 0L,
+                        duration = if (episode.duration > 0) episode.duration * 1000L else 0L
+                    )
+                }
+            }
         })
     }
 
@@ -59,6 +82,7 @@ class PlayerController @Inject constructor(
      * 会在 PlayerState 中带上精听标记，供迷你播放条/全屏播放器展示指示器。
      */
     fun play(episode: Episode, startPositionMs: Long = 0L, intensive: Boolean = false) {
+        queue = emptyList()
         val mediaItem = MediaItem.Builder()
             .setUri(episode.audioUrl)
             .setMediaId(episode.episodeid)
@@ -92,12 +116,46 @@ class PlayerController @Inject constructor(
     }
 
     /**
+     * 队列播放（学习路径「播放全部/随机播放」）：一次 MediaItems 入队，
+     * 播完自动续播下一集（onMediaItemTransition 同步 currentEpisode）。
+     * [shuffle] = true 时打乱入队顺序（洗牌后从新的第一集起播）。
+     */
+    fun playAll(episodes: List<Episode>, startPositionMs: Long = 0L, shuffle: Boolean = false) {
+        if (episodes.isEmpty()) return
+        val ordered = if (shuffle) episodes.shuffled() else episodes
+        val mediaItems = ordered.map { episode ->
+            MediaItem.Builder()
+                .setUri(episode.audioUrl)
+                .setMediaId(episode.episodeid)
+                .build()
+        }
+        queue = ordered
+
+        // 起播重置为正常倍速（同 [play] 的防残留快放说明）
+        resetSpeedIfChanged()
+        exoPlayer.setMediaItems(mediaItems, 0, startPositionMs)
+        exoPlayer.prepare()
+        exoPlayer.play()
+
+        _playerState.update {
+            it.copy(
+                currentEpisode = ordered.first(),
+                currentPosition = startPositionMs,
+                duration = if (ordered.first().duration > 0) ordered.first().duration * 1000L else 0L,
+                playbackRate = 1f,
+                isIntensiveMode = false
+            )
+        }
+    }
+
+    /**
      * 关闭播放器（对齐 Web closePlayer）：停止并清空当前音轨，
      * PlayerState 复位 → 迷你播放条/全屏播放器随之隐藏。倍速与循环一并复位。
      */
     fun stop() {
         sleepJob?.cancel()
         sleepJob = null
+        queue = emptyList()
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
         resetSpeedIfChanged()

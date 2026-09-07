@@ -10,6 +10,12 @@ import com.wxkzd.yuanlu.data.remote.dto.EpisodePageDto
 import com.wxkzd.yuanlu.data.remote.dto.FavoriteMutationDto
 import com.wxkzd.yuanlu.data.remote.dto.FavoritesResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.HistoryResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.AddEpisodeToPathRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.LearningPathDetailResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.LearningPathMutationResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.LearningPathsResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.LearningPathUpsertRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.PathSearchResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.PodcastDetailDto
@@ -216,4 +222,51 @@ interface ContentApi {
         @Query("pageSize") pageSize: Int = 20,
         @Query("status") status: String = "all"
     ): HistoryResponseDto
+
+    // ---------- 学习路径（对齐 Web core/learning-path，需登录；REST 契约见 LearningPathDtos） ----------
+
+    /** 信封：data = 我的路径卡片摘要（含进度/封面/创建者），需登录 */
+    @GET("api/learning-paths/mine")
+    suspend fun myLearningPaths(): LearningPathsResponseDto
+
+    /** 信封：data = 公开路径（发现 Tab，服务端排除当前用户），需登录 */
+    @GET("api/learning-paths/public")
+    suspend fun publicLearningPaths(): LearningPathsResponseDto
+
+    /** 信封；400=名称为空，需登录 */
+    @POST("api/learning-paths")
+    suspend fun createLearningPath(@Body body: LearningPathUpsertRequestDto): LearningPathMutationResponseDto
+
+    /** 信封：data = 路径详情（剧集清单 + 创建者 + 当前用户收听态） */
+    @GET("api/learning-paths/{pathid}")
+    suspend fun learningPathDetail(@Path("pathid") pathid: Int): LearningPathDetailResponseDto
+
+    /** 信封；403=非拥有者，需登录 */
+    @PATCH("api/learning-paths/{pathid}")
+    suspend fun updateLearningPath(
+        @Path("pathid") pathid: Int,
+        @Body body: LearningPathUpsertRequestDto
+    ): LearningPathMutationResponseDto
+
+    /** 信封；403=非拥有者，需登录 */
+    @DELETE("api/learning-paths/{pathid}")
+    suspend fun deleteLearningPath(@Path("pathid") pathid: Int): LearningPathMutationResponseDto
+
+    /** 信封；success=false + message=剧集已在列表中；403=非拥有者 */
+    @POST("api/learning-paths/{pathid}/episodes")
+    suspend fun addEpisodeToPath(
+        @Path("pathid") pathid: Int,
+        @Body body: AddEpisodeToPathRequestDto
+    ): LearningPathMutationResponseDto
+
+    /** 信封；403=非拥有者，需登录 */
+    @DELETE("api/learning-paths/{pathid}/episodes/{itemId}")
+    suspend fun removeEpisodeFromPath(
+        @Path("pathid") pathid: Int,
+        @Path("itemId") itemId: Int
+    ): LearningPathMutationResponseDto
+
+    /** 信封：data = 添加剧集弹窗搜索结果（published 剧集，最多 20 条） */
+    @GET("api/episode/search-for-path")
+    suspend fun searchEpisodesForPath(@Query("query") query: String): PathSearchResponseDto
 }

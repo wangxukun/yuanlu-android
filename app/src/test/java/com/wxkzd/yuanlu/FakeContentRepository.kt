@@ -8,6 +8,9 @@ import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
 import com.wxkzd.yuanlu.domain.model.FavoritesBundle
 import com.wxkzd.yuanlu.domain.model.HistoryPage
+import com.wxkzd.yuanlu.domain.model.LearningPathDetail
+import com.wxkzd.yuanlu.domain.model.LearningPathSummary
+import com.wxkzd.yuanlu.domain.model.PathEpisodeSearchItem
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
@@ -171,5 +174,75 @@ open class FakeContentRepository : ContentRepository {
         return favoriteMutationError ?: Result.Success(Unit).also {
             succeededRemovedEpisodes += episodeid
         }
+    }
+
+    // ---- 学习路径行为的可编程返回 ----
+    var myLearningPaths: Result<List<LearningPathSummary>> = Result.Success(emptyList())
+    var publicLearningPaths: Result<List<LearningPathSummary>> = Result.Success(emptyList())
+    var learningPathDetail: Result<LearningPathDetail> =
+        Result.Success(LearningPathDetail(pathid = 0, pathName = ""))
+    /** 创建/编辑/删除/添加/移除 的可编程失败（默认成功） */
+    var learningPathMutationError: Result.Error? = null
+    var pathSearchResults: Result<List<PathEpisodeSearchItem>> = Result.Success(emptyList())
+
+    val myLearningPathCalls = mutableListOf<Unit>()
+    val createdLearningPaths = mutableListOf<Triple<String, String?, Boolean>>()
+    val updatedLearningPaths = mutableListOf<Triple<Int, String, Pair<String?, Boolean>>>()
+    val deletedLearningPaths = mutableListOf<Int>()
+    val learningPathDetailCalls = mutableListOf<Int>()
+    val addedPathEpisodes = mutableListOf<Pair<Int, String>>()
+    val removedPathEpisodes = mutableListOf<Pair<Int, Int>>()
+    val pathSearchCalls = mutableListOf<String>()
+
+    override suspend fun getMyLearningPaths(): Result<List<LearningPathSummary>> {
+        myLearningPathCalls += Unit
+        return myLearningPaths
+    }
+
+    override suspend fun getPublicLearningPaths(): Result<List<LearningPathSummary>> =
+        publicLearningPaths
+
+    override suspend fun createLearningPath(
+        pathName: String,
+        description: String?,
+        isPublic: Boolean
+    ): Result<Unit> {
+        createdLearningPaths += Triple(pathName, description, isPublic)
+        return learningPathMutationError ?: Result.Success(Unit)
+    }
+
+    override suspend fun getLearningPath(pathid: Int): Result<LearningPathDetail> {
+        learningPathDetailCalls += pathid
+        return learningPathDetail
+    }
+
+    override suspend fun updateLearningPath(
+        pathid: Int,
+        pathName: String,
+        description: String?,
+        isPublic: Boolean
+    ): Result<Unit> {
+        updatedLearningPaths += Triple(pathid, pathName, description to isPublic)
+        return learningPathMutationError ?: Result.Success(Unit)
+    }
+
+    override suspend fun deleteLearningPath(pathid: Int): Result<Unit> {
+        deletedLearningPaths += pathid
+        return learningPathMutationError ?: Result.Success(Unit)
+    }
+
+    override suspend fun addEpisodeToLearningPath(pathid: Int, episodeid: String): Result<Unit> {
+        addedPathEpisodes += pathid to episodeid
+        return learningPathMutationError ?: Result.Success(Unit)
+    }
+
+    override suspend fun removeEpisodeFromLearningPath(pathid: Int, itemId: Int): Result<Unit> {
+        removedPathEpisodes += pathid to itemId
+        return learningPathMutationError ?: Result.Success(Unit)
+    }
+
+    override suspend fun searchEpisodesForPath(query: String): Result<List<PathEpisodeSearchItem>> {
+        pathSearchCalls += query
+        return pathSearchResults
     }
 }

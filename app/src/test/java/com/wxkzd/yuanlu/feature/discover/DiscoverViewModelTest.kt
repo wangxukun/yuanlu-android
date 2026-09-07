@@ -239,4 +239,32 @@ private class FakeContentRepository(
 
     override suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit> =
         Result.Error(600, "not implemented in fake")
+
+    // 学习路径：本测试不涉及
+    override suspend fun getMyLearningPaths(): Result<List<com.wxkzd.yuanlu.domain.model.LearningPathSummary>> =
+        Result.Success(emptyList())
+
+    override suspend fun getPublicLearningPaths(): Result<List<com.wxkzd.yuanlu.domain.model.LearningPathSummary>> =
+        Result.Success(emptyList())
+
+    override suspend fun createLearningPath(pathName: String, description: String?, isPublic: Boolean): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun getLearningPath(pathid: Int): Result<com.wxkzd.yuanlu.domain.model.LearningPathDetail> =
+        Result.Success(com.wxkzd.yuanlu.domain.model.LearningPathDetail(pathid = pathid, pathName = ""))
+
+    override suspend fun updateLearningPath(pathid: Int, pathName: String, description: String?, isPublic: Boolean): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun deleteLearningPath(pathid: Int): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun addEpisodeToLearningPath(pathid: Int, episodeid: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun removeEpisodeFromLearningPath(pathid: Int, itemId: Int): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun searchEpisodesForPath(query: String): Result<List<com.wxkzd.yuanlu.domain.model.PathEpisodeSearchItem>> =
+        Result.Success(emptyList())
 }

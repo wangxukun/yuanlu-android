@@ -32,6 +32,12 @@ import kotlinx.serialization.Serializable
 /** 收听历史（过滤/时间分组/断点续播入口，复刻 Web /library/history），需登录 */
 @Serializable data object ListeningHistoryNav : NavKey
 
+/** 学习路径列表（我的集合/发现双 Tab + 搜索 + 创建，复刻 Web /library/learning-paths），需登录 */
+@Serializable data object LearningPathsNav : NavKey
+
+/** 学习路径详情（播放全部/剧集清单，拥有者可编辑/删除/添加/移除剧集），携带路径 id */
+@Serializable data class LearningPathDetailNav(val pathId: Int) : NavKey
+
 
 /** 语音评测：由剧集详情「语音评测」按钮进入，携带当前 episodeId */
 @Serializable data class SpeechEvalNav(val episodeid: String) : NavKey
