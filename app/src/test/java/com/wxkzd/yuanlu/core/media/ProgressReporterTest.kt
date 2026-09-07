@@ -219,6 +219,13 @@ private class RecordingRepository : ContentRepository {
 
     // 收藏：本测试不涉及
     override suspend fun getFavorites(): Result<com.wxkzd.yuanlu.domain.model.FavoritesBundle> = error("unused")
+    // 收听历史：本测试不涉及
+    override suspend fun getListeningHistory(
+        page: Int,
+        pageSize: Int,
+        status: String
+    ): Result<com.wxkzd.yuanlu.domain.model.HistoryPage> =
+        Result.Success(com.wxkzd.yuanlu.domain.model.HistoryPage())
     override suspend fun checkPodcastFavorite(podcastid: String): Result<Boolean> = error("unused")
     override suspend fun addPodcastFavorite(podcastid: String): Result<Unit> = error("unused")
     override suspend fun removePodcastFavorite(podcastid: String): Result<Unit> = error("unused")

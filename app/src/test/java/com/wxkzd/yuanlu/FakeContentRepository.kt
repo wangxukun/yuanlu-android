@@ -7,6 +7,7 @@ import com.wxkzd.yuanlu.domain.model.DictEntry
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
 import com.wxkzd.yuanlu.domain.model.FavoritesBundle
+import com.wxkzd.yuanlu.domain.model.HistoryPage
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
@@ -120,6 +121,19 @@ open class FakeContentRepository : ContentRepository {
         progressSeconds: Float,
         isFinished: Boolean
     ): Result<Unit> = Result.Success(Unit)
+
+    // ---- 收听历史行为的可编程返回 ----
+    var historyPages: Map<Int, HistoryPage> = emptyMap()
+    val historyCalls = mutableListOf<Triple<Int, Int, String>>()
+
+    override suspend fun getListeningHistory(
+        page: Int,
+        pageSize: Int,
+        status: String
+    ): Result<HistoryPage> {
+        historyCalls += Triple(page, pageSize, status)
+        return Result.Success(historyPages[page] ?: HistoryPage())
+    }
 
     override suspend fun getFavorites(): Result<FavoritesBundle> =
         favoritesError ?: Result.Success(

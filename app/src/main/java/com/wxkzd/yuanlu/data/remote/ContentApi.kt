@@ -9,6 +9,7 @@ import com.wxkzd.yuanlu.data.remote.dto.EpisodeDto
 import com.wxkzd.yuanlu.data.remote.dto.EpisodePageDto
 import com.wxkzd.yuanlu.data.remote.dto.FavoriteMutationDto
 import com.wxkzd.yuanlu.data.remote.dto.FavoritesResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.HistoryResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.LikeCommentResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.PodcastDetailDto
@@ -205,4 +206,14 @@ interface ContentApi {
         @Field("episodeid") episodeid: String,
         @Field("userid") userid: String
     ): FavoriteMutationDto
+
+    // ---------- 收听历史（对齐 Web /api/user/history，需登录） ----------
+
+    /** 信封：data = { items, total, hasMore }；status: all | in-progress | finished */
+    @GET("api/user/history")
+    suspend fun userHistory(
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20,
+        @Query("status") status: String = "all"
+    ): HistoryResponseDto
 }

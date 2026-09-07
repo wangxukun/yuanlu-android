@@ -248,3 +248,41 @@ data class FavoritesBundle(
     val podcasts: List<FavoriteSeries> = emptyList(),
     val episodes: List<FavoriteEpisode> = emptyList()
 )
+
+// ---------- 收听历史（对齐 Web core/listening-history/dto.ts） ----------
+
+/** 历史记录里的剧集快照（author=平台，category=所属播客名） */
+data class HistoryEpisode(
+    val id: String = "",
+    val title: String = "",
+    val author: String = "",
+    val category: String = "",
+    val thumbnailUrl: String? = null,
+    /** 服务端已格式化的 "M:SS" */
+    val duration: String = "",
+    val durationSeconds: Int = 0
+)
+
+/** 一条收听历史 */
+data class HistoryItem(
+    val historyid: Int = 0,
+    /** ISO 时间串（UTC），驱动 今天/昨天/更早 分组 */
+    val listenAt: String = "",
+    val progressSeconds: Int = 0,
+    val isFinished: Boolean = false,
+    val episode: HistoryEpisode = HistoryEpisode()
+) {
+    /** 收听进度比例 0..1（无时长信息时为 0） */
+    val progressRatio: Float
+        get() = if (episode.durationSeconds > 0) {
+            (progressSeconds.toFloat() / episode.durationSeconds).coerceIn(0f, 1f)
+        } else 0f
+}
+
+/** 一页历史数据（GET api/user/history） */
+data class HistoryPage(
+    val items: List<HistoryItem> = emptyList(),
+    val total: Int = 0,
+    val hasMore: Boolean = false
+)
+

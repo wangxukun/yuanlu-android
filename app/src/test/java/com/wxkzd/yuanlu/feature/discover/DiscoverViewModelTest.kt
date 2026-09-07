@@ -215,6 +215,13 @@ private class FakeContentRepository(
     override suspend fun getFavorites(): Result<com.wxkzd.yuanlu.domain.model.FavoritesBundle> =
         Result.Success(com.wxkzd.yuanlu.domain.model.FavoritesBundle())
 
+    // 收听历史：本测试不涉及
+    override suspend fun getListeningHistory(
+        page: Int,
+        pageSize: Int,
+        status: String
+    ): Result<com.wxkzd.yuanlu.domain.model.HistoryPage> =
+        Result.Success(com.wxkzd.yuanlu.domain.model.HistoryPage())
     override suspend fun checkPodcastFavorite(podcastid: String): Result<Boolean> =
         Result.Success(false)
 

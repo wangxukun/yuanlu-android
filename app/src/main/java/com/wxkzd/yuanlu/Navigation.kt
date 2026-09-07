@@ -35,6 +35,7 @@ import com.wxkzd.yuanlu.feature.auth.LoginSheet
 import com.wxkzd.yuanlu.feature.discover.ChannelRoute
 import com.wxkzd.yuanlu.feature.discover.ChannelListRoute
 import com.wxkzd.yuanlu.feature.favorites.FavoritesRoute
+import com.wxkzd.yuanlu.feature.history.HistoryRoute
 import com.wxkzd.yuanlu.feature.intensive.IntensiveListeningRoute
 import com.wxkzd.yuanlu.feature.player.FullScreenPlayerScreen
 import com.wxkzd.yuanlu.feature.player.MiniPlayerBar
@@ -149,7 +150,8 @@ private fun AppNavHost(
                         onOpenPersonalCenter = { open(PersonalCenterNav) },
                         selectedTab = mainSelectedTab,
                         onSelectTab = { mainSelectedTab = it },
-                        onOpenFavorites = { open(FavoritesNav) }
+                        onOpenFavorites = { open(FavoritesNav) },
+                        onOpenListeningHistory = { open(ListeningHistoryNav) }
                     )
                 }
                 // 个人中心：复刻 Web /auth/personal-center（旅程数据/里程碑/账号与安全）
@@ -170,6 +172,13 @@ private fun AppNavHost(
                             mainSelectedTab = 1
                             back()
                         }
+                    )
+                }
+                // 收听历史：复刻 Web /library/history（过滤/时间分组/继续播放）
+                entry<ListeningHistoryNav> {
+                    HistoryRoute(
+                        onBack = { back() },
+                        onOpenEpisode = { open(PlayerNav(it)) }
                     )
                 }
                 entry<PodcastDetailNav> { key ->

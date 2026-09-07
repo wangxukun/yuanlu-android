@@ -7,6 +7,7 @@ import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
 import com.wxkzd.yuanlu.domain.model.FavoritesBundle
+import com.wxkzd.yuanlu.domain.model.HistoryPage
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
@@ -133,4 +134,16 @@ interface ContentRepository {
 
     /** 取消收藏单集（DELETE api/episode/favorite/delete） */
     suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit>
+
+    // ---------- 收听历史（我的收藏页同款入口，需登录） ----------
+
+    /**
+     * 分页拉取收听历史（GET api/user/history）。
+     * status: all | in-progress | finished（服务端过滤）；返回 { items, total, hasMore }。
+     */
+    suspend fun getListeningHistory(
+        page: Int,
+        pageSize: Int,
+        status: String
+    ): Result<HistoryPage>
 }

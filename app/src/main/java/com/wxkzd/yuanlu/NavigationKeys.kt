@@ -29,5 +29,9 @@ import kotlinx.serialization.Serializable
 /** 我的收藏（播客系列/单集双 Tab，复刻 Web /library/favorites），需登录 */
 @Serializable data object FavoritesNav : NavKey
 
+/** 收听历史（过滤/时间分组/断点续播入口，复刻 Web /library/history），需登录 */
+@Serializable data object ListeningHistoryNav : NavKey
+
+
 /** 语音评测：由剧集详情「语音评测」按钮进入，携带当前 episodeId */
 @Serializable data class SpeechEvalNav(val episodeid: String) : NavKey

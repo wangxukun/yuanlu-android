@@ -62,7 +62,8 @@ fun MainScreen(
     // Tab 选中态由导航层持有（收藏页空态「去发现」需跨页切换）
     selectedTab: Int = 0,
     onSelectTab: (Int) -> Unit = {},
-    onOpenFavorites: () -> Unit = {}
+    onOpenFavorites: () -> Unit = {},
+    onOpenListeningHistory: () -> Unit = {}
 ) {
     // 全屏卡片复习打开时隐藏底部导航（复习层挂在全局根层级，盖住迷你播放条）
     val vocabularyState by vocabularyViewModel.uiState.collectAsStateWithLifecycle()
@@ -129,7 +130,8 @@ fun MainScreen(
                     onThemeModeChange = onThemeModeChange,
                     userProfileViewModel = userProfileViewModel,
                     onOpenPersonalCenter = onOpenPersonalCenter,
-                    onOpenFavorites = onOpenFavorites
+                    onOpenFavorites = onOpenFavorites,
+                    onOpenListeningHistory = onOpenListeningHistory
                 )
             }
         }

@@ -21,6 +21,7 @@ import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
 import com.wxkzd.yuanlu.domain.model.FavoritesBundle
+import com.wxkzd.yuanlu.domain.model.HistoryPage
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
@@ -398,6 +399,22 @@ class ContentRepositoryImpl @Inject constructor(
 
     override suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit> =
         callFavoriteMutation { userid -> api.removeEpisodeFavorite(episodeid, userid) }
+
+    // ---------- 收听历史 ----------
+
+    override suspend fun getListeningHistory(
+        page: Int,
+        pageSize: Int,
+        status: String
+    ): Result<HistoryPage> = call {
+        val response = api.userHistory(page = page, pageSize = pageSize, status = status)
+        val data = response.data
+        if (!response.success || data == null) {
+            throw IOException(response.message ?: "收听历史加载失败")
+        }
+        data.toDomain()
+    }
+
 
     /** 收藏三件套（find-unique/insert/delete）都以 userid 为请求参数，未登录统一拦截 */
     private suspend fun requireUserid(): String =
