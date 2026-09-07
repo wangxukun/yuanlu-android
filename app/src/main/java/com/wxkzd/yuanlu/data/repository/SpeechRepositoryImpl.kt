@@ -5,8 +5,13 @@ import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.SpeechApi
 import com.wxkzd.yuanlu.data.remote.dto.EvaluateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.SpeechErrorBodyDto
+import com.wxkzd.yuanlu.domain.model.LeaderboardMetric
+import com.wxkzd.yuanlu.domain.model.LeaderboardPeriod
 import com.wxkzd.yuanlu.domain.model.SpeechEvalResult
+import com.wxkzd.yuanlu.domain.model.SpeechLeaderboard
+import com.wxkzd.yuanlu.domain.model.SpeechNotebook
 import com.wxkzd.yuanlu.domain.model.SpeechPracticeData
+import com.wxkzd.yuanlu.domain.model.WeakSentenceRecord
 import com.wxkzd.yuanlu.domain.repository.SpeechRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -92,4 +97,67 @@ class SpeechRepositoryImpl @Inject constructor(
             json.decodeFromString(SpeechErrorBodyDto.serializer(), raw).message
         }
     }.getOrNull()
+
+    override suspend fun getNotebook(): Result<SpeechNotebook> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.getNotebook()
+                val data = response.data
+                if (response.success && data != null) {
+                    Result.Success(data.toDomain())
+                } else {
+                    Result.Error(0, response.error ?: "弱项本数据加载失败")
+                }
+            } catch (e: HttpException) {
+                Result.Error(e.code(), httpMessage(e) ?: notebookErrorMessage(e.code()))
+            } catch (_: IOException) {
+                Result.NetworkError
+            }
+        }
+
+    override suspend fun getWeakErrors(): Result<List<WeakSentenceRecord>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.getWeakErrors()
+                if (response.success) {
+                    Result.Success(response.data.map { it.toDomain() })
+                } else {
+                    Result.Error(0, response.error ?: "弱项句子加载失败")
+                }
+            } catch (e: HttpException) {
+                // 403 = 弱项练习为 PRO 会员功能（UI 层据此渲染锁定态）
+                Result.Error(e.code(), httpMessage(e) ?: notebookErrorMessage(e.code()))
+            } catch (_: IOException) {
+                Result.NetworkError
+            }
+        }
+
+    override suspend fun getLeaderboard(
+        period: LeaderboardPeriod,
+        metric: LeaderboardMetric
+    ): Result<SpeechLeaderboard> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getLeaderboard(period.apiValue, metric.apiValue)
+            val data = response.data
+            if (response.success && data != null) {
+                Result.Success(data.toDomain())
+            } else {
+                Result.Error(0, response.error ?: "排行榜加载失败")
+            }
+        } catch (e: HttpException) {
+            Result.Error(
+                e.code(),
+                if (e.code() == 401) "请先登录后查看排行榜" else httpMessage(e) ?: "排行榜加载失败"
+            )
+        } catch (_: IOException) {
+            Result.NetworkError
+        }
+    }
+
+    /** 弱项族接口的 HTTP 状态码 → 中文文案（403 PRO 门禁保留状态码语义由 UI 分流） */
+    private fun notebookErrorMessage(code: Int): String = when (code) {
+        401 -> "请先登录后查看"
+        403 -> "PRO 会员功能"
+        else -> "弱项本数据加载失败"
+    }
 }

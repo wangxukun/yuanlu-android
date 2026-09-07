@@ -41,3 +41,12 @@ import kotlinx.serialization.Serializable
 
 /** 语音评测：由剧集详情「语音评测」按钮进入，携带当前 episodeId */
 @Serializable data class SpeechEvalNav(val episodeid: String) : NavKey
+
+/** 发音弱项本主页（能力画像/音素诊断/弱项列表，复刻 Web /library/pronunciation），需登录 */
+@Serializable data object PronunciationNotebookNav : NavKey
+
+/** 发音闯关复习（逐题录音评测流转，复刻 Web /library/pronunciation/practice），PRO 会员功能 */
+@Serializable data object WeaknessPracticeNav : NavKey
+
+/** 发音达人榜（周期×维度双 Tab 排行，复刻 Web /library/pronunciation/leaderboard），需登录 */
+@Serializable data object SpeechLeaderboardNav : NavKey

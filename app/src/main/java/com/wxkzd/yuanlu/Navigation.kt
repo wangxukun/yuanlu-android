@@ -43,6 +43,10 @@ import com.wxkzd.yuanlu.feature.player.FullScreenPlayerScreen
 import com.wxkzd.yuanlu.feature.player.MiniPlayerBar
 import com.wxkzd.yuanlu.feature.player.PlayerRoute
 import com.wxkzd.yuanlu.feature.player.PlayerShellViewModel
+import com.wxkzd.yuanlu.feature.pronunciation.PronunciationNotebookRoute
+import com.wxkzd.yuanlu.feature.pronunciation.PronunciationNotebookViewModel
+import com.wxkzd.yuanlu.feature.pronunciation.SpeechLeaderboardRoute
+import com.wxkzd.yuanlu.feature.pronunciation.WeaknessPracticeRoute
 import com.wxkzd.yuanlu.feature.podcast.PodcastDetailRoute
 import com.wxkzd.yuanlu.feature.profile.PersonalCenterRoute
 import com.wxkzd.yuanlu.feature.profile.UserProfileViewModel
@@ -154,7 +158,8 @@ private fun AppNavHost(
                         onSelectTab = { mainSelectedTab = it },
                         onOpenFavorites = { open(FavoritesNav) },
                         onOpenListeningHistory = { open(ListeningHistoryNav) },
-                        onOpenLearningPaths = { open(LearningPathsNav) }
+                        onOpenLearningPaths = { open(LearningPathsNav) },
+                        onOpenPronunciationNotebook = { open(PronunciationNotebookNav) }
                     )
                 }
                 // 个人中心：复刻 Web /auth/personal-center（旅程数据/里程碑/账号与安全）
@@ -230,6 +235,31 @@ private fun AppNavHost(
                 entry<SpeechEvalNav> { key ->
                     SpeechEvalRoute(
                         episodeid = key.episodeid,
+                        onBack = { back() }
+                    )
+                }
+                // 发音弱项本：能力画像/复习计划/音素诊断/弱项列表（复刻 Web /library/pronunciation）
+                entry<PronunciationNotebookNav> {
+                    val notebookViewModel: PronunciationNotebookViewModel = hiltViewModel()
+                    // 从闯关复习/达人榜返回时刷新弱项列表（达标句子已被移出弱项集）
+                    LaunchedEffect(Unit) { notebookViewModel.onReenter() }
+                    PronunciationNotebookRoute(
+                        onBack = { back() },
+                        onOpenPractice = { open(WeaknessPracticeNav) },
+                        onOpenLeaderboard = { open(SpeechLeaderboardNav) },
+                        onOpenEpisode = { open(PlayerNav(it)) },
+                        viewModel = notebookViewModel
+                    )
+                }
+                // 发音闯关复习：弱项句子逐题录音评测（复刻 Web /library/pronunciation/practice）
+                entry<WeaknessPracticeNav> {
+                    WeaknessPracticeRoute(
+                        onExit = { back() }
+                    )
+                }
+                // 发音达人榜：周期×维度双 Tab 排行 + 我的排名（复刻 Web /library/pronunciation/leaderboard）
+                entry<SpeechLeaderboardNav> {
+                    SpeechLeaderboardRoute(
                         onBack = { back() }
                     )
                 }

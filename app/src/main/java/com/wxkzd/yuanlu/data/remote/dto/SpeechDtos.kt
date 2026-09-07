@@ -187,3 +187,164 @@ data class SpeechErrorBodyDto(
     val error: String? = null,
     val message: String? = null
 )
+
+// ---------- GET api/speech/notebook（弱项本主页聚合） ----------
+
+@Serializable
+data class NotebookResponseDto(
+    val success: Boolean = true,
+    val data: NotebookDataDto? = null,
+    val error: String? = null
+)
+
+@Serializable
+data class NotebookDataDto(
+    val isPremium: Boolean = false,
+    val weakThreshold: Int = 80,
+    val profile: SpeechProfileDto = SpeechProfileDto(),
+    val phonemeStats: List<PhonemeStatDto> = emptyList(),
+    val totalErrors: Int = 0,
+    /** 会员全量 / 非会员前 3 条试用切片 */
+    val errors: List<WeakRecordDto> = emptyList()
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.SpeechNotebook(
+        isPremium = isPremium,
+        weakThreshold = weakThreshold,
+        profile = profile.toDomain(),
+        phonemeStats = phonemeStats.map { it.toDomain() },
+        totalErrors = totalErrors,
+        errors = errors.map { it.toDomain() }
+    )
+}
+
+/** Web SpeechProfileDto 同构（聚合均值，无数据为 null） */
+@Serializable
+data class SpeechProfileDto(
+    val evalCount: Int = 0,
+    val avgOverall: Double? = null,
+    val avgAccuracy: Double? = null,
+    val avgFluency: Double? = null,
+    val avgIntegrity: Double? = null,
+    val avgSpeed: Double? = null,
+    val speedFitScore: Double? = null,
+    val cefrLevel: String? = null
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.SpeechProfile(
+        evalCount = evalCount,
+        avgOverall = avgOverall,
+        avgAccuracy = avgAccuracy,
+        avgFluency = avgFluency,
+        avgIntegrity = avgIntegrity,
+        avgSpeed = avgSpeed,
+        speedFitScore = speedFitScore,
+        cefrLevel = cefrLevel
+    )
+}
+
+@Serializable
+data class PhonemeStatDto(
+    val phoneme: String = "",
+    val avgScore: Int = 0,
+    val count: Int = 0,
+    val lowScoreCount: Int = 0
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.PhonemeStat(phoneme, avgScore, count, lowScoreCount)
+}
+
+/** 弱项句子记录（notebook 与 errors 接口共用；episode 仅保证列表页字段） */
+@Serializable
+data class WeakRecordDto(
+    val recognitionid: Long = 0,
+    val episodeid: String? = null,
+    val episode: WeakEpisodeDto? = null,
+    val targetText: String? = null,
+    val targetStartTime: Int? = null,
+    /** errors 接口的字幕补齐字段 */
+    val subtitleTextCn: String? = null,
+    val subtitleWords: List<SubtitleWordDto>? = null,
+    val subtitleEnd: Double? = null,
+    val subtitleId: Int? = null,
+    val accuracyScore: Double = 0.0,
+    val overallScore: Double? = null,
+    val speed: Double? = null,
+    val recognitionDate: String? = null
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.WeakSentenceRecord(
+        recognitionid = recognitionid,
+        episodeid = episodeid,
+        episodeTitle = episode?.title,
+        episodeCoverUrl = episode?.coverUrl?.takeIf { it.isNotBlank() },
+        episodeAudioUrl = episode?.audioUrl?.takeIf { it.isNotBlank() },
+        targetText = targetText.orEmpty(),
+        targetStartTime = targetStartTime ?: 0,
+        subtitleTextCn = subtitleTextCn,
+        subtitleWords = subtitleWords?.map { SubtitleWord(it.word, it.start, it.end) },
+        subtitleEnd = subtitleEnd,
+        subtitleId = subtitleId,
+        accuracyScore = accuracyScore.roundToInt(),
+        overallScore = overallScore?.roundToInt(),
+        speed = speed?.roundToInt(),
+        recognitionDate = recognitionDate.orEmpty()
+    )
+}
+
+@Serializable
+data class WeakEpisodeDto(
+    val title: String? = null,
+    /** 签名后直链；notebook 不下发 audioUrl（闯关复习走 errors 接口） */
+    val coverUrl: String? = null,
+    val audioUrl: String? = null
+)
+
+@Serializable
+data class ErrorsResponseDto(
+    val success: Boolean = true,
+    val data: List<WeakRecordDto> = emptyList(),
+    val error: String? = null
+)
+
+// ---------- GET api/speech/leaderboard ----------
+
+@Serializable
+data class LeaderboardResponseDto(
+    val success: Boolean = true,
+    val data: LeaderboardDataDto? = null,
+    val error: String? = null
+)
+
+@Serializable
+data class LeaderboardDataDto(
+    val period: String? = null,
+    val metric: String? = null,
+    val entries: List<LeaderboardEntryDto> = emptyList(),
+    val me: MyRankDto? = null
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.SpeechLeaderboard(
+        period = if (period == "daily") com.wxkzd.yuanlu.domain.model.LeaderboardPeriod.DAILY
+        else com.wxkzd.yuanlu.domain.model.LeaderboardPeriod.WEEKLY,
+        metric = if (metric == "count") com.wxkzd.yuanlu.domain.model.LeaderboardMetric.COUNT
+        else com.wxkzd.yuanlu.domain.model.LeaderboardMetric.SCORE,
+        entries = entries.map { it.toDomain() },
+        me = me?.toDomain()
+    )
+}
+
+@Serializable
+data class LeaderboardEntryDto(
+    val userid: String = "",
+    val nickname: String = "",
+    val avatar: String = "",
+    val evalCount: Int = 0,
+    val avgScore: Int = 0
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.LeaderboardEntry(userid, nickname, avatar, evalCount, avgScore)
+}
+
+@Serializable
+data class MyRankDto(
+    val rank: Int = 0,
+    val evalCount: Int = 0,
+    val avgScore: Int = 0
+) {
+    fun toDomain() = com.wxkzd.yuanlu.domain.model.MyLeaderboardRank(rank, evalCount, avgScore)
+}

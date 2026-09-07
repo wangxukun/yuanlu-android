@@ -1,7 +1,10 @@
 package com.wxkzd.yuanlu.data.remote
 
+import com.wxkzd.yuanlu.data.remote.dto.ErrorsResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.EvaluateRequestDto
 import com.wxkzd.yuanlu.data.remote.dto.EvaluateResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.LeaderboardResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.NotebookResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.PracticeDataResponseDto
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -21,4 +24,19 @@ interface SpeechApi {
     /** 信封：data = { score, details, recognitionId }；403 = EVALUATION_QUOTA_EXCEEDED */
     @POST("api/speech/evaluate")
     suspend fun evaluate(@Body body: EvaluateRequestDto): EvaluateResponseDto
+
+    /** 信封：data = { isPremium, weakThreshold, profile, phonemeStats, totalErrors, errors } */
+    @GET("api/speech/notebook")
+    suspend fun getNotebook(): NotebookResponseDto
+
+    /** 信封：data = 弱项句子全量（含音频直链与字幕补齐）；403 = PRO 会员功能 */
+    @GET("api/speech/errors")
+    suspend fun getWeakErrors(): ErrorsResponseDto
+
+    /** 信封：data = { period, metric, entries, me }；401 = 未登录 */
+    @GET("api/speech/leaderboard")
+    suspend fun getLeaderboard(
+        @Query("period") period: String,
+        @Query("metric") metric: String
+    ): LeaderboardResponseDto
 }

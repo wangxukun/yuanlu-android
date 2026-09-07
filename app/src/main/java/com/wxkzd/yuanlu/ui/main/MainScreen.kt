@@ -64,7 +64,8 @@ fun MainScreen(
     onSelectTab: (Int) -> Unit = {},
     onOpenFavorites: () -> Unit = {},
     onOpenListeningHistory: () -> Unit = {},
-    onOpenLearningPaths: () -> Unit = {}
+    onOpenLearningPaths: () -> Unit = {},
+    onOpenPronunciationNotebook: () -> Unit = {}
 ) {
     // 全屏卡片复习打开时隐藏底部导航（复习层挂在全局根层级，盖住迷你播放条）
     val vocabularyState by vocabularyViewModel.uiState.collectAsStateWithLifecycle()
@@ -133,7 +134,8 @@ fun MainScreen(
                     onOpenPersonalCenter = onOpenPersonalCenter,
                     onOpenFavorites = onOpenFavorites,
                     onOpenListeningHistory = onOpenListeningHistory,
-                    onOpenLearningPaths = onOpenLearningPaths
+                    onOpenLearningPaths = onOpenLearningPaths,
+                    onOpenPronunciationNotebook = onOpenPronunciationNotebook
                 )
             }
         }
