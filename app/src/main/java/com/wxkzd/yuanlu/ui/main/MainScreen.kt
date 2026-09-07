@@ -97,8 +97,10 @@ fun MainScreen(
                     if (isLoggedIn) {
                         HomeScreen(
                             viewModel = hiltViewModel<HomeViewModel>(),
-                            onOpenPodcast = onOpenPodcast,
-                            onOpenEpisode = onOpenEpisode
+                            onOpenEpisode = onOpenEpisode,
+                            onOpenHistory = onOpenListeningHistory,
+                            onOpenLearningPaths = onOpenLearningPaths,
+                            onGoDiscover = { onSelectTab(1) }
                         )
                     } else {
                         LoginGateScreen(onLogin = onLogin)

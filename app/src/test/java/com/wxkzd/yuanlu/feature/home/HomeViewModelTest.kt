@@ -1,15 +1,25 @@
 package com.wxkzd.yuanlu.feature.home
 
 import com.wxkzd.yuanlu.core.network.Result
+import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ChannelData
 import com.wxkzd.yuanlu.domain.model.Comment
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.EpisodePage
+import com.wxkzd.yuanlu.domain.model.HistoryEpisode
+import com.wxkzd.yuanlu.domain.model.HistoryItem
+import com.wxkzd.yuanlu.domain.model.HistoryPage
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.PodcastDetail
+import com.wxkzd.yuanlu.domain.model.ProfileStats
 import com.wxkzd.yuanlu.domain.model.SubtitleBundle
 import com.wxkzd.yuanlu.domain.model.Tag
+import com.wxkzd.yuanlu.domain.model.UserProfile
+import com.wxkzd.yuanlu.domain.model.VocabularyItem
+import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
+import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
+import com.wxkzd.yuanlu.domain.repository.SmsSendStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -20,9 +30,15 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
@@ -39,92 +55,252 @@ class HomeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun episode(id: String) = Episode(episodeid = id, title = "Episode $id")
+    private fun episode(id: String, difficulty: String? = null, podcastid: String? = null) =
+        Episode(
+            episodeid = id,
+            title = "Episode $id",
+            difficulty = difficulty,
+            podcastid = podcastid
+        )
+
+    private fun historyItem(id: Int, title: String) = HistoryItem(
+        historyid = id,
+        listenAt = "2026-09-01T00:00:00",
+        progressSeconds = 100,
+        isFinished = false,
+        episode = HistoryEpisode(
+            id = "ep-$id",
+            title = title,
+            author = "Apple Podcasts",
+            category = "六分钟英语",
+            durationSeconds = 600
+        )
+    )
+
+    private fun nowIsoUtc(): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+        .apply { timeZone = TimeZone.getTimeZone("UTC") }
+        .format(Date())
+
+    private fun fullWeek(vararg minutes: Int) =
+        HomeViewModel.DAY_LABELS.mapIndexed { i, label -> WeeklyActivityItem(label, minutes[i]) }
 
     @Test
-    fun `initial load fetches first page and editor picks`() = runTest(dispatcher) {
-        val repository = FakeContentRepository(
-            episodesByPage = mapOf(1 to List(20) { episode("p1-$it") }),
-            podcasts = listOf(
-                Podcast(podcastid = "a", title = "A", isEditorPick = true),
-                Podcast(podcastid = "b", title = "B", isEditorPick = false)
+    fun `initial load composes header cards and episode lists`() = runTest(dispatcher) {
+        val viewModel = HomeViewModel(
+            authRepository = FakeAuthRepository(
+                profile = UserProfile(
+                    userid = "u1",
+                    nickname = "远路漫漫",
+                    bio = "每天听一点",
+                    learnLevel = "Beginner",
+                    weeklyListeningGoalHours = 2,
+                    weeklyWordsGoal = 50
+                ),
+                stats = ProfileStats(streakDays = 3),
+                weekNow = fullWeek(0, 30, 0, 60, 0, 0, 0),
+                weekLast = fullWeek(0, 0, 0, 0, 0, 0, 0)
+            ),
+            contentRepository = FakeContentRepository(
+                episodes = listOf(
+                    episode("e1", "A1", "p1"),
+                    episode("e2", "A2", "p1"),
+                    episode("e3", "B1"),
+                    episode("e4"),
+                    episode("e5"),
+                    episode("e6"),
+                    episode("e7"),
+                    episode("e8"),
+                    episode("e9")
+                ),
+                podcasts = listOf(
+                    Podcast(
+                        podcastid = "p1",
+                        title = "六分钟英语",
+                        coverUrl = "https://cdn.example.com/cover.jpg?Signature=abc"
+                    )
+                ),
+                history = HistoryPage(
+                    items = listOf(historyItem(1, "第一条"), historyItem(2, "第二条"), historyItem(3, "第三条"))
+                ),
+                vocab = listOf(
+                    VocabularyItem(vocabularyid = 1, word = "road", addedDate = nowIsoUtc()),
+                    VocabularyItem(vocabularyid = 2, word = "far", addedDate = "2020-01-01T00:00:00")
+                )
             )
         )
-        val viewModel = HomeViewModel(repository)
         runCurrent()
 
         val state = viewModel.uiState.value
         assertFalse(state.isLoading)
-        assertEquals(20, state.episodes.size)
-        assertEquals(listOf("a"), state.editorPicks.map { it.podcastid })
-        assertEquals(1, state.page)
-        assertFalse(state.endReached)
+        assertNull(state.error)
+        // 头部
+        assertEquals("远路漫漫", state.displayName)
+        assertEquals("每天听一点", state.bio)
+        assertEquals(3, state.streakDays)
+        // 最近一次收听 + 继续收听
+        assertEquals("第一条", state.latestHistory?.episode?.title)
+        assertEquals(2, state.continueListening.size)
+        // 本周里程：90 分钟 = 1.5h × 5km/h = 7.5km；目标 2h = 10km；还差 30 分钟
+        assertEquals(7.5, state.mileage.kmCurrent, 0.001)
+        assertEquals(10.0, state.mileage.kmGoal, 0.001)
+        assertEquals(30, state.mileage.remainingMins)
+        // 上周无数据且本周 >0 → +100%
+        assertEquals(100, state.mileage.weeklyProgress)
+        // 词汇路标：仅 1 个是本周新增
+        assertEquals(1, state.mileage.wordsCurrent)
+        assertEquals(50, state.mileage.wordsGoal)
+        // 我的路：7 天且仅今天高亮
+        assertEquals(7, state.journeyDays.size)
+        assertEquals(1, state.journeyDays.count { it.isToday })
+        // 为你推荐：Beginner → A1/A2
+        assertEquals("Beginner", state.recommendedLevel)
+        assertEquals(listOf("e1", "e2"), state.recommended.map { it.episodeid })
+        // 剧集封面回退到已签名的播客封面
+        assertEquals(
+            "https://cdn.example.com/cover.jpg?Signature=abc",
+            state.recommended.first().coverFallbackUrl
+        )
+        // 最新发布：最多 8 条
+        assertEquals(8, state.latestEpisodes.size)
     }
 
     @Test
-    fun `loadMore appends next page until a short page arrives`() = runTest(dispatcher) {
-        val repository = FakeContentRepository(
-            episodesByPage = mapOf(
-                1 to List(20) { episode("p1-$it") },
-                2 to List(20) { episode("p2-$it") },
-                3 to List(7) { episode("p3-$it") }
+    fun `recommendation falls back to general when level has no match`() = runTest(dispatcher) {
+        val viewModel = HomeViewModel(
+            authRepository = FakeAuthRepository(
+                profile = UserProfile(userid = "u1", learnLevel = "Advanced")
+            ),
+            contentRepository = FakeContentRepository(
+                episodes = listOf(episode("e1", "A1"), episode("e2", "B1"), episode("e3", "A2"))
             )
         )
-        val viewModel = HomeViewModel(repository)
         runCurrent()
 
-        viewModel.loadMore()
-        runCurrent()
-        var state = viewModel.uiState.value
-        assertEquals(40, state.episodes.size)
-        assertEquals(2, state.page)
-        assertFalse(state.endReached)
-
-        viewModel.loadMore()
-        runCurrent()
-        state = viewModel.uiState.value
-        assertEquals(47, state.episodes.size)
-        assertTrue(state.endReached)
+        val state = viewModel.uiState.value
+        assertEquals("General", state.recommendedLevel)
+        assertEquals(listOf("e1", "e2", "e3"), state.recommended.map { it.episodeid })
     }
 
     @Test
-    fun `loadMore is a no-op after end reached`() = runTest(dispatcher) {
-        val repository = FakeContentRepository(
-            episodesByPage = mapOf(1 to List(5) { episode("p1-$it") })
+    fun `journey strip keeps weekday labels when weekly activity missing`() = runTest(dispatcher) {
+        val viewModel = HomeViewModel(
+            authRepository = FakeAuthRepository(weekNow = emptyList()),
+            contentRepository = FakeContentRepository(episodes = emptyList())
         )
-        val viewModel = HomeViewModel(repository)
         runCurrent()
-        assertTrue(viewModel.uiState.value.endReached)
 
-        viewModel.loadMore()
-        runCurrent()
-        assertEquals(5, viewModel.uiState.value.episodes.size)
-        assertEquals(1, repository.latestEpisodesCalls)
+        val days = viewModel.uiState.value.journeyDays
+        assertEquals(HomeViewModel.DAY_LABELS, days.map { it.label })
+        assertTrue(days.all { it.minutes == 0 })
     }
 
     @Test
-    fun `initial error surfaces message`() = runTest(dispatcher) {
-        val repository = FakeContentRepository(failure = Result.Error(500, "boom"))
-        val viewModel = HomeViewModel(repository)
+    fun `section failure is fail-soft while total failure surfaces error`() = runTest(dispatcher) {
+        // profile 失败、其余成功：整页可用，昵称走默认
+        val partial = HomeViewModel(
+            authRepository = FakeAuthRepository(
+                profileFailure = Result.Error(500, "profile boom"),
+                stats = ProfileStats(streakDays = 2),
+                weekNow = fullWeek(0, 0, 0, 0, 0, 0, 0),
+                weekLast = fullWeek(0, 0, 0, 0, 0, 0, 0)
+            ),
+            contentRepository = FakeContentRepository(episodes = listOf(episode("e1")))
+        )
         runCurrent()
+        val partialState = partial.uiState.value
+        assertNull(partialState.error)
+        assertEquals("朋友", partialState.displayName)
+        assertEquals(listOf("e1"), partialState.latestEpisodes.map { it.episodeid })
 
-        assertEquals("boom", viewModel.uiState.value.error)
+        // 全部失败：网络错误 → 整页错误态
+        val all = HomeViewModel(
+            authRepository = FakeAuthRepository(allFailure = Result.NetworkError),
+            contentRepository = FakeContentRepository(failure = Result.NetworkError)
+        )
+        runCurrent()
+        val allState = all.uiState.value
+        assertNotNull(allState.error)
+        assertEquals("网络连接失败", allState.error)
+    }
+
+    @Test
+    fun `silent refresh keeps content while reloading`() = runTest(dispatcher) {
+        val repository = FakeContentRepository(episodes = listOf(episode("e1")))
+        val viewModel = HomeViewModel(
+            authRepository = FakeAuthRepository(),
+            contentRepository = repository
+        )
+        runCurrent()
+        assertEquals(1, viewModel.uiState.value.latestEpisodes.size)
+
+        viewModel.refresh(silent = true)
+        runCurrent()
+        // 刷新完成后恢复非转圈态，内容仍在
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        assertEquals(1, viewModel.uiState.value.latestEpisodes.size)
     }
 }
 
+private class FakeAuthRepository(
+    private val profile: UserProfile? = null,
+    private val profileFailure: Result<UserProfile>? = null,
+    private val stats: ProfileStats? = null,
+    private val weekNow: List<WeeklyActivityItem> = emptyList(),
+    private val weekLast: List<WeeklyActivityItem> = emptyList(),
+    /** 非空时所有端点统一失败（整页错误态用例） */
+    private val allFailure: Result<*>? = null
+) : AuthRepository {
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> result(value: T): Result<T> = (allFailure as? Result<T>) ?: Result.Success(value)
+
+    override suspend fun loginWithPassword(email: String, password: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun loginWithSms(phone: String, code: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun logout() = Unit
+
+    override suspend fun sendSmsCode(phone: String): Result<SmsSendStatus> =
+        Result.Error(600, "not implemented in fake")
+
+    override suspend fun getProfile(): Result<UserProfile> =
+        allFailure?.let { it as Result<UserProfile> } ?: profileFailure
+            ?: Result.Success(profile ?: UserProfile(userid = "u1"))
+
+    override suspend fun updateProfile(
+        nickname: String,
+        bio: String,
+        learnLevel: String,
+        dailyStudyGoalMins: Int,
+        weeklyListeningGoalHours: Int,
+        weeklyWordsGoal: Int,
+        avatarJpeg: ByteArray?
+    ): Result<UserProfile> = Result.Error(600, "not implemented in fake")
+
+    override suspend fun getStatsOverview(): Result<ProfileStats> =
+        result(stats ?: ProfileStats())
+
+    override suspend fun getWeeklyActivity(weekOffset: Int): Result<List<WeeklyActivityItem>> =
+        result(if (weekOffset == 0) weekNow else weekLast)
+
+    override suspend fun getAchievements(): Result<List<AchievementItem>> =
+        result(emptyList())
+}
+
 private class FakeContentRepository(
-    private val episodesByPage: Map<Int, List<Episode>> = emptyMap(),
+    private val episodes: List<Episode> = emptyList(),
     private val podcasts: List<Podcast> = emptyList(),
-    private val failure: Result.Error? = null
+    private val history: HistoryPage = HistoryPage(),
+    private val vocab: List<VocabularyItem> = emptyList(),
+    private val failure: Result<*>? = null
 ) : ContentRepository {
 
-    var latestEpisodesCalls = 0
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> result(value: T): Result<T> = (failure as? Result<T>) ?: Result.Success(value)
 
-    override suspend fun getLatestEpisodes(page: Int, pageSize: Int): Result<List<Episode>> {
-        latestEpisodesCalls++
-        failure?.let { return it }
-        return Result.Success(episodesByPage[page].orEmpty())
-    }
+    override suspend fun getLatestEpisodes(page: Int, pageSize: Int): Result<List<Episode>> =
+        result(episodes)
 
     override suspend fun getEpisode(episodeid: String): Result<Episode> =
         Result.Success(Episode(episodeid = episodeid, title = ""))
@@ -139,8 +315,7 @@ private class FakeContentRepository(
         ascending: Boolean
     ): Result<EpisodePage> = Result.Success(EpisodePage(emptyList(), 0, false))
 
-    override suspend fun getPodcasts(): Result<List<Podcast>> =
-        failure ?: Result.Success(podcasts)
+    override suspend fun getPodcasts(): Result<List<Podcast>> = result(podcasts)
 
     override suspend fun getPodcastDetail(podcastid: String): Result<PodcastDetail> =
         Result.Success(PodcastDetail(Podcast(podcastid = podcastid, title = ""), false, emptyList()))
@@ -148,8 +323,7 @@ private class FakeContentRepository(
     override suspend fun searchPodcasts(query: String): Result<List<Podcast>> =
         Result.Success(emptyList())
 
-    override suspend fun getTags(query: String?): Result<List<Tag>> =
-        Result.Success(emptyList())
+    override suspend fun getTags(query: String?): Result<List<Tag>> = Result.Success(emptyList())
 
     override suspend fun getChannel(name: String): Result<ChannelData> =
         Result.Success(ChannelData(name, 0, emptyList(), emptyList()))
@@ -157,15 +331,23 @@ private class FakeContentRepository(
     override suspend fun getComments(episodeid: String): Result<List<Comment>> =
         Result.Success(emptyList())
 
-    override suspend fun createComment(episodeid: String, content: String, parentId: Int?): Result<Comment> =
-        Result.Error(0, "not implemented in fake")
+    override suspend fun createComment(
+        episodeid: String,
+        content: String,
+        parentId: Int?
+    ): Result<Comment> = Result.Error(600, "not implemented in fake")
 
     override suspend fun toggleCommentLike(commentid: Int): Result<Boolean> =
         Result.Success(false)
 
-    // 词典与生词（精听查词）：本仓库测试不涉及，给出空实现以满足接口
+    override suspend fun translate(text: String): Result<String> =
+        Result.Error(0, "not implemented in fake")
+
+    override suspend fun fetchTtsAudioUrl(text: String): Result<String> =
+        Result.Error(600, "not implemented in fake")
+
     override suspend fun lookupWord(word: String): Result<com.wxkzd.yuanlu.domain.model.DictEntry> =
-        com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+        Result.Error(600, "not implemented in fake")
 
     override suspend fun addVocabulary(
         word: String,
@@ -175,50 +357,36 @@ private class FakeContentRepository(
         episodeid: String,
         timestampSec: Int,
         speakUrl: String
-    ): Result<Unit> = com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+    ): Result<Unit> = Result.Error(600, "not implemented in fake")
 
     override suspend fun getVocabularyWords(): Result<Set<String>> =
-        com.wxkzd.yuanlu.core.network.Result.Success(emptySet())
+        Result.Success(emptySet())
 
-    // 生词本（列表与复习）：本仓库测试不涉及，给出空实现以满足接口
-    override suspend fun getAllVocabulary(): Result<List<com.wxkzd.yuanlu.domain.model.VocabularyItem>> =
-        com.wxkzd.yuanlu.core.network.Result.Success(emptyList())
+    override suspend fun getAllVocabulary(): Result<List<VocabularyItem>> = result(vocab)
 
     override suspend fun deleteVocabulary(vocabularyid: Int): Result<Unit> =
-        com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+        Result.Error(600, "not implemented in fake")
 
     override suspend fun submitVocabularyReview(
         vocabularyid: Int,
         quality: Int
     ): Result<com.wxkzd.yuanlu.domain.model.VocabularyReviewOutcome> =
-        com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+        Result.Error(600, "not implemented in fake")
 
-    override suspend fun updateVocabularyStatus(vocabularyid: Int, mastered: Boolean): Result<Unit> =
-        com.wxkzd.yuanlu.core.network.Result.Error(600, "not implemented in fake")
+    override suspend fun updateVocabularyStatus(
+        vocabularyid: Int,
+        mastered: Boolean
+    ): Result<Unit> = Result.Error(600, "not implemented in fake")
 
     override suspend fun updateEpisodeProgress(
         episodeid: String,
         progressSeconds: Float,
         isFinished: Boolean
-    ): Result<Unit> = com.wxkzd.yuanlu.core.network.Result.Success(Unit)
+    ): Result<Unit> = Result.Success(Unit)
 
-    override suspend fun translate(text: String): Result<String> =
-        Result.Error(0, "not implemented in fake")
-
-    override suspend fun fetchTtsAudioUrl(text: String): Result<String> =
-        Result.Error(600, "not implemented in fake")
-
-    // 收藏：本测试不涉及，给出空实现以满足接口
     override suspend fun getFavorites(): Result<com.wxkzd.yuanlu.domain.model.FavoritesBundle> =
         Result.Success(com.wxkzd.yuanlu.domain.model.FavoritesBundle())
 
-    // 收听历史：本测试不涉及
-    override suspend fun getListeningHistory(
-        page: Int,
-        pageSize: Int,
-        status: String
-    ): Result<com.wxkzd.yuanlu.domain.model.HistoryPage> =
-        Result.Success(com.wxkzd.yuanlu.domain.model.HistoryPage())
     override suspend fun checkPodcastFavorite(podcastid: String): Result<Boolean> =
         Result.Success(false)
 
@@ -237,21 +405,33 @@ private class FakeContentRepository(
     override suspend fun removeEpisodeFavorite(episodeid: String): Result<Unit> =
         Result.Error(600, "not implemented in fake")
 
-    // 学习路径：本测试不涉及
+    override suspend fun getListeningHistory(
+        page: Int,
+        pageSize: Int,
+        status: String
+    ): Result<HistoryPage> = result(history)
+
     override suspend fun getMyLearningPaths(): Result<List<com.wxkzd.yuanlu.domain.model.LearningPathSummary>> =
         Result.Success(emptyList())
 
     override suspend fun getPublicLearningPaths(): Result<List<com.wxkzd.yuanlu.domain.model.LearningPathSummary>> =
         Result.Success(emptyList())
 
-    override suspend fun createLearningPath(pathName: String, description: String?, isPublic: Boolean): Result<Unit> =
-        Result.Error(600, "not implemented in fake")
+    override suspend fun createLearningPath(
+        pathName: String,
+        description: String?,
+        isPublic: Boolean
+    ): Result<Unit> = Result.Error(600, "not implemented in fake")
 
     override suspend fun getLearningPath(pathid: Int): Result<com.wxkzd.yuanlu.domain.model.LearningPathDetail> =
         Result.Success(com.wxkzd.yuanlu.domain.model.LearningPathDetail(pathid = pathid, pathName = ""))
 
-    override suspend fun updateLearningPath(pathid: Int, pathName: String, description: String?, isPublic: Boolean): Result<Unit> =
-        Result.Error(600, "not implemented in fake")
+    override suspend fun updateLearningPath(
+        pathid: Int,
+        pathName: String,
+        description: String?,
+        isPublic: Boolean
+    ): Result<Unit> = Result.Error(600, "not implemented in fake")
 
     override suspend fun deleteLearningPath(pathid: Int): Result<Unit> =
         Result.Error(600, "not implemented in fake")
