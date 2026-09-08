@@ -26,6 +26,12 @@ interface SpeechRepository {
         wavBytes: ByteArray
     ): Result<SpeechEvalResult>
 
+    /**
+     * GET api/speech/detail?id=：历史评测的深度明细（OSS 上的有道 ISE JSON，
+     * 含逐词得分/时间戳与音素）。重进页面恢复逐词纠错面板用（Web 同款惰性拉取）。
+     */
+    suspend fun getSpeechDetail(recognitionId: Long): Result<SpeechEvalResult>
+
     /** GET api/speech/notebook：弱项本主页聚合（画像/音素统计/试用切片弱项列表），需登录 */
     suspend fun getNotebook(): Result<SpeechNotebook>
 

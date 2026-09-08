@@ -67,8 +67,16 @@ data class SpeechEvalResult(
     val speed: Int,
     val words: List<SpeechEvalWord>,
     val recognitionId: Long? = null,
-    val userAudioPath: String? = null
-)
+    /** 本轮录音的本地文件路径（会话内即时回放用；重进页面后由云端 userAudioUrl 恢复） */
+    val userAudioPath: String? = null,
+    /** 历史记录的云端录音签名直链（重进页面后"回放我的发音/我"的播放源） */
+    val userAudioUrl: String? = null
+) {
+    /** 回放音频源：本地文件优先（快、无流量），缺失或已失效时回退云端直链 */
+    fun audioSource(): String? = userAudioPath?.takeIf { java.io.File(it).exists() }
+        ?.let { java.io.File(it).toURI().toString() }
+        ?: userAudioUrl?.takeIf { it.isNotBlank() }
+}
 
 // ---------- 语音评测：练习数据 ----------
 
@@ -83,7 +91,11 @@ data class SpeechPracticeRecord(
     val targetText: String,
     val targetStartTime: Int,
     val subtitleId: Int?,
-    val recognitionDate: String
+    val recognitionDate: String,
+    /** 深度明细（逐词/音素）的 OSS 地址：重进页面经 /api/speech/detail 拉取回填 */
+    val detailUrl: String? = null,
+    /** 云端录音签名直链：重进页面后"回放我的发音/我"的播放源 */
+    val userAudioUrl: String? = null
 ) {
     /** 该次尝试的综合分（Web：overallScore ?? accuracyScore） */
     val bestScore: Int get() = overallScore ?: accuracyScore

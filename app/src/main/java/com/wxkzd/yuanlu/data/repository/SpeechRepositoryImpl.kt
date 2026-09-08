@@ -91,6 +91,25 @@ class SpeechRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getSpeechDetail(recognitionId: Long): Result<SpeechEvalResult> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.getSpeechDetail(recognitionId)
+                val details = response.data
+                if (response.success && details != null) {
+                    // 明细缺失的维度由调用方（VM）用历史记录的分数补齐
+                    Result.Success(details.toDomain(recognitionId, null))
+                } else {
+                    Result.Error(0, response.error ?: "暂无逐词明细")
+                }
+            } catch (e: HttpException) {
+                // 404 = 该记录无深度明细（旧记录/上传失败），静默降级由调用方处理
+                Result.Error(e.code(), httpMessage(e) ?: "暂无逐词明细")
+            } catch (_: IOException) {
+                Result.NetworkError
+            }
+        }
+
     /** 解析错误响应体里的 message（配额超限等业务文案），失败回退 null */
     private fun httpMessage(e: HttpException): String? = runCatching {
         e.response()?.errorBody()?.string()?.let { raw ->

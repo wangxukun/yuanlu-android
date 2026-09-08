@@ -210,6 +210,8 @@ class SpeechEvalViewModel @Inject constructor(
                             isTrialMode = result.data.isTrialMode
                         )
                     }
+                    // 重进页面恢复定位句的历史结果（云端录音直链 + 深度明细回填，Web 同口径）
+                    filtered.getOrNull(focusIndex)?.let { restoreFromHistory(it.id) }
                 }
                 is Result.Error -> _uiState.update {
                     it.copy(isLoading = false, loadError = result.message)
@@ -251,6 +253,61 @@ class SpeechEvalViewModel @Inject constructor(
     private fun latestRecordFor(sub: Subtitle, records: List<SpeechPracticeRecord>): SpeechPracticeRecord? =
         records.filter { matchesRecord(sub, it) }.maxByOrNull { it.recognitionid }
 
+    /**
+     * 从历史记录恢复某句的结果卡（重进页面 / 切到已练句时，对齐 Web previousResult 口径）：
+     * 1. 先以记录分数字段 + 云端录音直链（userAudioUrl）立即恢复结果面——
+     *    "回放我的发音"与词级"我"即可用（本地文件优先、云端回退）；
+     * 2. 记录带 detailUrl 时异步拉 /api/speech/detail 回填逐词/音素明细
+     *    （回填前结果面短暂显示"本句未返回逐词明细"，Web 同样先分数后明细）；
+     * 3. 会话内若已产生更新的评测结果（cache 的 recognitionId 变化），历史回填作废。
+     */
+    private fun restoreFromHistory(subtitleId: Int) {
+        val state = _uiState.value
+        val sub = state.subtitles.firstOrNull { it.id == subtitleId } ?: return
+        val record = latestRecordFor(sub, state.records) ?: return
+        if (record.recognitionid == 0L) return
+
+        val base = SpeechEvalResult(
+            overallScore = record.bestScore,
+            pronunciation = record.accuracyScore,
+            fluency = record.fluencyScore ?: record.accuracyScore,
+            integrity = record.integrityScore ?: record.accuracyScore,
+            speed = record.speed ?: 0,
+            words = emptyList(),
+            recognitionId = record.recognitionid,
+            userAudioUrl = record.userAudioUrl
+        )
+        if (resultCache[subtitleId] == null) {
+            resultCache[subtitleId] = base
+            val live = _uiState.value
+            if (live.current?.id == subtitleId &&
+                live.phase != EvalPhase.RECORDING && live.phase != EvalPhase.EVALUATING
+            ) {
+                _uiState.update { it.copy(phase = EvalPhase.RESULT, result = base, selectedWordIndex = null) }
+            }
+        }
+        if (record.detailUrl == null) return
+        viewModelScope.launch {
+            when (val detail = speechRepository.getSpeechDetail(record.recognitionid)) {
+                is Result.Success -> {
+                    // 仅当缓存仍指向这条历史（未被更新的会话内评测覆盖）才回填
+                    val cached = resultCache[subtitleId]
+                    if (cached?.recognitionId == record.recognitionid && detail.data.words.isNotEmpty()) {
+                        val merged = cached.copy(words = detail.data.words)
+                        resultCache[subtitleId] = merged
+                        val live = _uiState.value
+                        if (live.current?.id == subtitleId &&
+                            live.result?.recognitionId == record.recognitionid
+                        ) {
+                            _uiState.update { it.copy(result = merged) }
+                        }
+                    }
+                }
+                else -> Unit // 静默降级：旧记录无明细时保持基础结果（文案兜底）
+            }
+        }
+    }
+
     private fun countWords(text: String): Int = text.trim().split(Regex("\\s+")).count { it.isNotBlank() }
 
     // ---------- 设置 ----------
@@ -275,8 +332,8 @@ class SpeechEvalViewModel @Inject constructor(
         if (index < 0 || index > state.subtitles.lastIndex || index == state.index) return
         stopPlayback()
         advanceJob?.cancel()
-        // 音标缓存按词复用，跨句保留；已评测句从结果缓存恢复结果面
-        // （录音回放路径 + 逐词/音素明细随句恢复，selectedWordIndex 重选、盲读重新遮挡）
+        // 音标缓存按词复用，跨句保留；已评测句优先用会话内结果缓存，
+        // 否则尝试从历史记录恢复（云端录音直链 + 深度明细回填，Web previousResult 同口径）
         val target = state.subtitles[index]
         val restored = resultCache[target.id]
         _uiState.update {
@@ -289,6 +346,7 @@ class SpeechEvalViewModel @Inject constructor(
                 blindRevealed = false
             )
         }
+        if (restored == null) restoreFromHistory(target.id)
         prefetchIpa(target)
     }
 
@@ -452,27 +510,21 @@ class SpeechEvalViewModel @Inject constructor(
 
     /**
      * 查看当前句最近一次历史得分（顶部操作栏"最近得分"入口）：
-     * 由记录构建仅含分数维度的结果并翻转到结果面；历史记录无逐词明细与录音。
+     * 会话内有缓存直接翻到结果面；否则从历史记录恢复（含云端录音与明细回填）。
      */
     fun showLatestScore() {
         val state = _uiState.value
         if (state.phase == EvalPhase.RECORDING || state.phase == EvalPhase.EVALUATING) return
-        val record = state.latestRecord ?: return
+        val sub = state.current ?: return
+        val cached = resultCache[sub.id]
+        if (cached == null) {
+            restoreFromHistory(sub.id)
+            return
+        }
         stopPlayback()
         advanceJob?.cancel()
         _uiState.update {
-            it.copy(
-                phase = EvalPhase.RESULT,
-                result = SpeechEvalResult(
-                    overallScore = record.bestScore,
-                    pronunciation = record.accuracyScore,
-                    fluency = record.fluencyScore ?: record.accuracyScore,
-                    integrity = record.integrityScore ?: record.accuracyScore,
-                    speed = record.speed ?: 0,
-                    words = emptyList()
-                ),
-                selectedWordIndex = null
-            )
+            it.copy(phase = EvalPhase.RESULT, result = cached, selectedWordIndex = null)
         }
     }
 
@@ -512,17 +564,17 @@ class SpeechEvalViewModel @Inject constructor(
         )
     }
 
-    /** 回放我的发音（可只放词切片：startSec/endSec 为相对录音秒） */
+    /** 回放我的发音（可只放词切片：startSec/endSec 为相对录音秒；本地文件优先、云端直链回退） */
     fun playUserAudio(startSec: Double? = null, endSec: Double? = null) {
         val state = _uiState.value
         if (state.playing == PlaybackKind.USER || state.playing == PlaybackKind.WORD_ME) { stopPlayback(); return }
-        val path = state.result?.userAudioPath
-        if (path == null) {
+        val source = state.result?.audioSource()
+        if (source == null) {
             _toast.value = "暂无录音可回放"
             return
         }
         playUrl(
-            File(path).toURI().toString(), PlaybackKind.USER,
+            source, PlaybackKind.USER,
             startMs = startSec?.let { (it * 1000).toInt() },
             endMs = endSec?.let { (it * 1000).toInt() }
         )
@@ -556,7 +608,7 @@ class SpeechEvalViewModel @Inject constructor(
         playUrl(url, PlaybackKind.WORD_ORIGINAL, (hit.start * 1000).toInt(), (hit.end * 1000).toInt())
     }
 
-    /** 词级"我"：回放录音中该词的切片 */
+    /** 词级"我"：回放录音中该词的切片（本地文件优先、云端直链回退） */
     fun playWordMe(wordIndex: Int) {
         val state = _uiState.value
         if (state.playing == PlaybackKind.WORD_ME) { stopPlayback(); return }
@@ -565,13 +617,13 @@ class SpeechEvalViewModel @Inject constructor(
             _toast.value = "该词无切片时间"
             return
         }
-        val path = state.result?.userAudioPath
-        if (path == null) {
+        val source = state.result?.audioSource()
+        if (source == null) {
             _toast.value = "暂无录音可回放"
             return
         }
         playUrl(
-            File(path).toURI().toString(), PlaybackKind.WORD_ME,
+            source, PlaybackKind.WORD_ME,
             (w.start!! * 1000).toInt(), (w.end!! * 1000).toInt()
         )
     }

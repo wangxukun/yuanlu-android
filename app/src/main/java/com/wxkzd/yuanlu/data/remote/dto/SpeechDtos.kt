@@ -94,9 +94,21 @@ data class PracticeRecordDto(
         targetText = targetText.orEmpty(),
         targetStartTime = targetStartTime,
         subtitleId = subtitleId,
-        recognitionDate = recognitionDate.orEmpty()
+        recognitionDate = recognitionDate.orEmpty(),
+        detailUrl = detailUrl?.takeIf { it.isNotBlank() },
+        userAudioUrl = userAudioUrl?.takeIf { it.isNotBlank() }
     )
 }
+
+// ---------- GET api/speech/detail（历史评测深度明细回填） ----------
+
+/** 信封：data = OSS 上的有道 ISE 明细 JSON（与 evaluate 的 details 同构，含 words/phonemes） */
+@Serializable
+data class SpeechDetailResponseDto(
+    val success: Boolean = true,
+    val data: YoudaoDetailsDto? = null,
+    val error: String? = null
+)
 
 // ---------- POST api/speech/evaluate ----------
 
