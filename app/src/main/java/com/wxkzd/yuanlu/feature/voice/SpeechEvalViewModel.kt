@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wxkzd.yuanlu.core.auth.TokenStore
 import com.wxkzd.yuanlu.core.datastore.PracticeSettingsStore
 import com.wxkzd.yuanlu.core.datastore.SettingsStore
 import com.wxkzd.yuanlu.core.network.Result
@@ -16,6 +17,8 @@ import com.wxkzd.yuanlu.domain.model.SpeechPracticeRecord
 import com.wxkzd.yuanlu.domain.model.Subtitle
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
 import com.wxkzd.yuanlu.domain.repository.SpeechRepository
+import com.wxkzd.yuanlu.feature.vocabulary.WordLookupController
+import com.wxkzd.yuanlu.feature.vocabulary.WordSheetState
 import com.wxkzd.yuanlu.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -57,7 +60,9 @@ data class SpeechEvalUiState(
     /** 音标模式的逐词音标缓存（word 小写 → US 音标，含斜杠） */
     val ipaCache: Map<String, String> = emptyMap(),
     /** 盲读模式是否揭示原文：换句复位、新一轮评测结果产出后自动揭示（Web blindRevealed 同口径） */
-    val blindRevealed: Boolean = false
+    val blindRevealed: Boolean = false,
+    /** 剧集标题（查词弹层底栏"来源"展示；加载时顺带拉取，失败静默） */
+    val episodeTitle: String? = null
 ) {
     val current: Subtitle? get() = subtitles.getOrNull(index)
     val effectiveThreshold: Int get() = settings.effectivePassThreshold
@@ -89,6 +94,7 @@ class SpeechEvalViewModel @Inject constructor(
     private val contentRepository: ContentRepository,
     private val practiceSettingsStore: PracticeSettingsStore,
     private val appSettingsStore: SettingsStore,
+    private val tokenStore: TokenStore,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -98,6 +104,28 @@ class SpeechEvalViewModel @Inject constructor(
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
     fun consumeToast() { _toast.value = null }
+
+    /**
+     * 原声/慢速播放的实时进度（MediaPlayer 绝对时间轴，与词级时间戳同轴）；
+     * null = 不点亮扫光（AI 朗读/录音回放/词级播放/停止，对齐 Web highlightController
+     * 的 -1 语义）。独立小流量 + StateFlow 去重，避免 50ms tick 复制整个 UiState。
+     */
+    private val _highlightPositionMs = MutableStateFlow<Long?>(null)
+    val highlightPositionMs: StateFlow<Long?> = _highlightPositionMs.asStateFlow()
+
+    /** 点词查词共享控制器（与精听页同一套查词/保存生词口径） */
+    private val wordLookup = WordLookupController(
+        contentRepository = contentRepository,
+        tokenStore = tokenStore,
+        scope = viewModelScope,
+        onToast = { _toast.value = it }
+    )
+
+    /** 查词弹层状态；null 关闭 */
+    val wordSheet: StateFlow<WordSheetState?> get() = wordLookup.wordSheet
+
+    /** 已保存生词集合（登录后懒加载；句内已保存词 primary 标色用） */
+    val savedWords: StateFlow<Set<String>?> get() = wordLookup.savedWords
 
     private var episodeId: String = ""
 
@@ -134,6 +162,13 @@ class SpeechEvalViewModel @Inject constructor(
         if (this.episodeId == episodeId && _uiState.value.subtitles.isNotEmpty()) return
         this.episodeId = episodeId
         _uiState.update { SpeechEvalUiState(settings = it.settings, themeMode = it.themeMode) }
+        // 剧集标题仅供查词弹层底栏"来源"展示，静默失败不影响练习
+        viewModelScope.launch {
+            when (val r = contentRepository.getEpisode(episodeId)) {
+                is Result.Success -> _uiState.update { it.copy(episodeTitle = r.data.title) }
+                else -> Unit
+            }
+        }
         viewModelScope.launch {
             when (val result = speechRepository.getPracticeData(episodeId)) {
                 is Result.Success -> {
@@ -345,6 +380,25 @@ class SpeechEvalViewModel @Inject constructor(
         _uiState.update { it.copy(phase = EvalPhase.IDLE, result = null, selectedWordIndex = null) }
     }
 
+    // ---------- 点词查词（共享控制器，与精听页完全一致） ----------
+
+    /**
+     * 点词查词：语音评测页对齐 Web 行为——不打断当前播放（原声片段到句尾自然停止），
+     * 上下文取当前句原文/译文，时间戳优先词级起点。
+     */
+    fun onWordClick(rawWord: String, timestampSec: Double) {
+        val sub = _uiState.value.current ?: return
+        wordLookup.onWordClick(rawWord, sub.textEn, sub.textCn ?: "", timestampSec)
+    }
+
+    fun closeWordSheet() {
+        wordLookup.closeWordSheet()
+    }
+
+    fun saveCurrentWord() {
+        wordLookup.saveCurrentWord(episodeId)
+    }
+
     // ---------- 结果区交互 ----------
 
     /** 点词展开音素诊断（Web：<85 分的词可点） */
@@ -515,22 +569,29 @@ class SpeechEvalViewModel @Inject constructor(
                 }
                 mp.start()
                 _uiState.update { s -> s.copy(playing = kind) }
+                // 仅原声/慢速播放上报进度（驱动句内词级扫光；AI 朗读独立时间轴不点亮，
+                // 对齐 Web highlightController 在 TTS 时返回 -1 的口径）
+                val trackHighlight = kind == PlaybackKind.ORIGINAL || kind == PlaybackKind.SLOW
                 monitorJob = viewModelScope.launch {
                     while (isActive) {
                         delay(50)
                         if (!mp.isPlaying) break
+                        if (trackHighlight) _highlightPositionMs.value = mp.currentPosition.toLong()
                         if (endMs != null && mp.currentPosition >= endMs) {
                             runCatching { mp.stop() }
                             break
                         }
                     }
+                    if (trackHighlight) _highlightPositionMs.value = null
                     _uiState.update { s -> if (s.playing == kind) s.copy(playing = PlaybackKind.NONE) else s }
                 }
             }
             mp.setOnCompletionListener {
+                _highlightPositionMs.value = null
                 _uiState.update { s -> if (s.playing == kind) s.copy(playing = PlaybackKind.NONE) else s }
             }
             mp.setOnErrorListener { _, _, _ ->
+                _highlightPositionMs.value = null
                 _uiState.update { s -> if (s.playing == kind) s.copy(playing = PlaybackKind.NONE) else s }
                 true
             }
@@ -545,6 +606,7 @@ class SpeechEvalViewModel @Inject constructor(
     fun stopPlayback() {
         monitorJob?.cancel()
         monitorJob = null
+        _highlightPositionMs.value = null
         player?.let { mp ->
             runCatching {
                 if (mp.isPlaying) mp.stop()

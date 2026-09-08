@@ -11,6 +11,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Leaderboard
@@ -48,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,22 +61,46 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wxkzd.yuanlu.domain.model.EvalPhase
 import com.wxkzd.yuanlu.domain.model.PracticeTextMode
 import com.wxkzd.yuanlu.domain.model.SpeechEvalResult
 import com.wxkzd.yuanlu.domain.model.Subtitle
+import com.wxkzd.yuanlu.domain.model.SubtitleWord
+import com.wxkzd.yuanlu.feature.player.Accent100
+import com.wxkzd.yuanlu.feature.player.Accent300
+import com.wxkzd.yuanlu.feature.player.Accent700
+import com.wxkzd.yuanlu.feature.player.Accent900
+import com.wxkzd.yuanlu.feature.player.isDarkAppearance
 import com.wxkzd.yuanlu.ui.components.MicIcon
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * 单句评测卡（复刻 Web SpeechEvaluationCard）：
  * 录音准备态（三播放钮 + 字幕区 + 大录音钮）⇄ 结果态（环形得分 + 逐词纠错 + 音素诊断），
  * 两态之间以水平轴翻转动画切换；顶部操作栏右侧提供"最近得分"历史入口。
+ *
+ * 字幕区英文原句为可交互文本：点词查词（共享 VocabularySheet + WordLookupController，
+ * 与精听页一致）；原声/慢速播放时按词级时间戳扫光高亮（AI 朗读不触发——
+ * highlightPositionMs 由 ViewModel 仅在 ORIGINAL/SLOW 播放时发值）。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -89,7 +117,13 @@ fun SpeechEvalCard(
     onPlayWordMe: (Int) -> Unit,
     onPrefetchIpa: (Subtitle) -> Unit = {},
     onToggleBlindReveal: () -> Unit = {},
-    onShowLatestScore: () -> Unit = {}
+    onShowLatestScore: () -> Unit = {},
+    /** 原声/慢速播放的实时进度（null/未传入 = 不点亮扫光） */
+    highlightPositionMs: StateFlow<Long?>? = null,
+    /** 已保存生词集合（句内已保存词 primary 标色；未传入不标色） */
+    savedWords: StateFlow<Set<String>?>? = null,
+    /** 点词查词回调（word 为带标点原词，由查词入口统一清洗） */
+    onWordClick: ((word: String, timestampSec: Double) -> Unit)? = null
 ) {
     val subtitle = state.current ?: return
 
@@ -156,6 +190,9 @@ fun SpeechEvalCard(
                 settings = state.settings,
                 ipaCache = state.ipaCache,
                 revealed = state.blindRevealed,
+                highlightPositionMs = highlightPositionMs,
+                savedWords = savedWords,
+                onWordClick = onWordClick,
                 onToggleReveal = onToggleBlindReveal
             )
 
@@ -203,7 +240,7 @@ fun SpeechEvalCard(
     }
 }
 
-// ---------- 字幕区（原文 / 音标 / 盲读 三模式 + 句末翻译图标 + 中文翻译 + 盲读切换） ----------
+// ---------- 字幕区（原文 / 音标 / 盲读 三模式 + 点词查词 + 词级扫光 + 盲读切换） ----------
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -212,6 +249,9 @@ private fun SubtitleSection(
     settings: com.wxkzd.yuanlu.domain.model.PracticeSettings,
     ipaCache: Map<String, String>,
     revealed: Boolean,
+    highlightPositionMs: StateFlow<Long?>?,
+    savedWords: StateFlow<Set<String>?>?,
+    onWordClick: ((word: String, timestampSec: Double) -> Unit)?,
     onToggleReveal: () -> Unit
 ) {
     val englishSize = when (settings.fontSizeLevel) {
@@ -223,11 +263,16 @@ private fun SubtitleSection(
     var translationOverride by remember(subtitle.id, settings.showTranslation) { mutableStateOf<Boolean?>(null) }
     val showCn = translationOverride ?: settings.showTranslation
     val blindMasked = settings.textMode == PracticeTextMode.BLIND && !revealed
+    // 进度与生词集合在句内订阅：50ms 进度 tick 只重组句子文本，不惊动整卡
+    val highlightFallback = remember { MutableStateFlow<Long?>(null) }
+    val savedFallback = remember { MutableStateFlow<Set<String>?>(null) }
+    val posMs by (highlightPositionMs ?: highlightFallback).collectAsStateWithLifecycle()
+    val saved by (savedWords ?: savedFallback).collectAsStateWithLifecycle()
 
     Column {
         when {
             blindMasked -> {
-                // 盲读：按词长生成模糊条，句末附翻译图标
+                // 盲读：按词长生成模糊条（不可点查词），句末附翻译图标
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -244,43 +289,16 @@ private fun SubtitleSection(
                     TranslateToggleButton(showCn = showCn, onClick = { translationOverride = !showCn })
                 }
             }
-            settings.textMode == PracticeTextMode.IPA -> {
-                // 音标：逐词替换为词典 US 音标（未命中回退原词），句末附翻译图标
-                val parts = subtitle.textEn.split(Regex("\\s+")).filter { it.isNotBlank() }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    parts.forEach { word ->
-                        val rendered = ipaCache[word.trim { !it.isLetter() && it != '\'' }.lowercase()] ?: word
-                        Text(
-                            text = rendered,
-                            fontSize = englishSize,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    TranslateToggleButton(showCn = showCn, onClick = { translationOverride = !showCn })
-                }
-            }
-            else -> {
-                // 原文：逐词流式排版，句末附翻译图标
-                val parts = subtitle.textEn.split(Regex("\\s+")).filter { it.isNotBlank() }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    parts.forEach { word ->
-                        Text(
-                            text = word,
-                            fontSize = englishSize,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    TranslateToggleButton(showCn = showCn, onClick = { translationOverride = !showCn })
-                }
-            }
+            else -> InteractiveSentenceText(
+                subtitle = subtitle,
+                fontSize = englishSize,
+                ipaMap = if (settings.textMode == PracticeTextMode.IPA) ipaCache else null,
+                sweepSec = posMs?.div(1000.0),
+                savedWords = saved,
+                onWordClick = onWordClick,
+                showCn = showCn,
+                onToggleCn = { translationOverride = !showCn }
+            )
         }
 
         // 中文翻译：只看 showCn（盲读模式下同样展示，对齐 Web；不再被盲读模式屏蔽）
@@ -305,6 +323,177 @@ private fun SubtitleSection(
             BlindRevealPill(masked = blindMasked, onClick = onToggleReveal)
         }
     }
+}
+
+/** 句内可交互 token：展示文本（音标模式为音标）、原词（查词入参）、字符区间、词级时间戳 */
+private data class SentenceToken(
+    val display: String,
+    val word: String,
+    val start: Int,
+    val end: Int,
+    val timeStart: Double
+)
+
+/** 单词扫光状态：背景光斑 alpha（0..1）与已读前景插值（0..1，对齐 Web useWordHighlight） */
+private data class WordSweepPaint(val bgAlpha: Float, val readAlpha: Float)
+
+/** 查词/音标键：去除词上标点后小写（与音标预取、生词集合口径一致） */
+private fun cleanWordKey(word: String): String =
+    word.trim { !it.isLetter() && it != '\'' }.lowercase()
+
+/**
+ * 分词并记录字符区间（"单词 + 单空格"拼接文本口径，与精听 srtWordTokens 一致）：
+ * 有词级时间戳 → 逐词绑定 start/end（可扫光可点）；无 → 按空白分词兜底
+ * （仅点词查词，时间戳退化为句起点）。音标模式展示文本替换为词典 US 音标。
+ */
+private fun buildSentenceTokens(
+    subtitle: Subtitle,
+    words: List<SubtitleWord>,
+    ipaMap: Map<String, String>?
+): List<SentenceToken> {
+    val tokens = mutableListOf<SentenceToken>()
+    var cursor = 0
+    fun push(rawWord: String, timeStart: Double) {
+        val display = if (ipaMap != null) ipaMap[cleanWordKey(rawWord)] ?: rawWord else rawWord
+        tokens.add(SentenceToken(display, rawWord, cursor, cursor + display.length - 1, timeStart))
+        cursor += display.length + 1 // 词后拼一个空格
+    }
+    if (words.isNotEmpty()) {
+        words.forEach { push(it.word, it.start) }
+    } else {
+        subtitle.textEn.split(Regex("\\s+")).filter { it.isNotBlank() }.forEach { push(it, subtitle.start) }
+    }
+    return tokens
+}
+
+/**
+ * 词级扫光（对齐 Web useWordHighlight 全量口径）：
+ * - 当前朗读词背景光斑全亮；已读词前景转 accent；未读保持基础色；
+ * - 词间间隙内线性插值交叉过渡——prev 光斑 1→0、next 光斑 0→1，prev 前景同步
+ *   primary→accent；间隙越长过渡越慢（停顿/慢速天然自适应）；
+ * - 整句读完全部转已读色；播放起点之前全暗。
+ */
+private fun sweepPaints(words: List<SubtitleWord>, t: Double): List<WordSweepPaint> {
+    val n = words.size
+    if (n == 0) return emptyList()
+    val start = words.first().start
+    val end = words.last().end
+    if (t < start) return List(n) { WordSweepPaint(0f, 0f) }
+    if (t >= end) return List(n) { WordSweepPaint(0f, 1f) }
+    val current = words.indexOfFirst { t >= it.start && t <= it.end }
+    if (current >= 0) {
+        return List(n) { i ->
+            when {
+                i < current -> WordSweepPaint(0f, 1f)
+                i == current -> WordSweepPaint(1f, 0f)
+                else -> WordSweepPaint(0f, 0f)
+            }
+        }
+    }
+    // 词间间隙：已读部分（< next）转 accent，prev/next 光斑交叉过渡
+    var prev = -1
+    var next = n
+    words.forEachIndexed { i, w ->
+        if (w.end < t) prev = i
+        if (w.start > t && next == n) next = i
+    }
+    val paints = MutableList(n) { i -> if (i < next) WordSweepPaint(0f, 1f) else WordSweepPaint(0f, 0f) }
+    if (prev >= 0 && next < n) {
+        val gap = words[next].start - words[prev].end
+        if (gap > 0) {
+            val p = ((t - words[prev].end) / gap).coerceIn(0.0, 1.0).toFloat()
+            paints[prev] = WordSweepPaint(1f - p, p)
+            paints[next] = WordSweepPaint(p, 0f)
+        }
+    }
+    return paints
+}
+
+/** 句末内联翻译图标的占位 id */
+private const val TranslateToggleTag = "translateToggle"
+
+/**
+ * 可交互英文原句（normal/ipa 模式共用）：
+ * - 点词查词：AnnotatedString 词区间 + pointerInput 命中（精听 SubtitleRow 同款机制）；
+ * - 词级扫光：sweepSec 非 null（原声/慢速播放中）时逐词应用 [sweepPaints]；
+ * - 已保存生词 primary 标色（Web globalVocabWords 同语义）；
+ * - 句末内联"文/A"翻译切换图标（随文本换行流动）。
+ */
+@Composable
+private fun InteractiveSentenceText(
+    subtitle: Subtitle,
+    fontSize: TextUnit,
+    ipaMap: Map<String, String>?,
+    sweepSec: Double?,
+    savedWords: Set<String>?,
+    onWordClick: ((word: String, timestampSec: Double) -> Unit)?,
+    showCn: Boolean,
+    onToggleCn: () -> Unit
+) {
+    val isDark = isDarkAppearance()
+    var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+
+    val words = subtitle.words.orEmpty()
+    val tokens = remember(subtitle.id, ipaMap) { buildSentenceTokens(subtitle, words, ipaMap) }
+    val currentTokens by rememberUpdatedState(tokens)
+
+    val paints = if (sweepSec != null && words.isNotEmpty()) sweepPaints(words, sweepSec) else null
+
+    // 扫光配色（与精听/Web 同源）：浅色光斑 accent-100、深色 accent-900（40% 上限）；
+    // 已读前景 accent-700 / accent-300
+    val sweepBg = if (isDark) Accent900 else Accent100
+    val sweepBgMaxAlpha = if (isDark) 0.4f else 0.9f
+    val readColor = if (isDark) Accent300 else Accent700
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    val annotated: AnnotatedString = buildAnnotatedString {
+        tokens.forEachIndexed { i, token ->
+            val paint = paints?.getOrNull(i)
+            val isSavedWord = savedWords?.contains(cleanWordKey(token.word)) == true
+            val base = if (isSavedWord) primaryColor else onSurfaceColor
+            val color = when {
+                paint == null || paint.readAlpha <= 0.001f ->
+                    if (isSavedWord) primaryColor else Color.Unspecified
+                paint.readAlpha >= 0.999f -> readColor
+                else -> lerp(base, readColor, paint.readAlpha)
+            }
+            val background = paint
+                ?.takeIf { it.bgAlpha > 0.001f }
+                ?.let { sweepBg.copy(alpha = sweepBgMaxAlpha * it.bgAlpha) }
+                ?: Color.Transparent
+            withStyle(SpanStyle(color = color, background = background)) { append(token.display) }
+            if (i != tokens.lastIndex) append(' ')
+        }
+        appendInlineContent(TranslateToggleTag, "译")
+    }
+
+    Text(
+        text = annotated,
+        onTextLayout = { textLayout = it },
+        inlineContent = mapOf(
+            TranslateToggleTag to InlineTextContent(
+                Placeholder(1.8.em, 1.8.em, PlaceholderVerticalAlign.TextCenter)
+            ) {
+                TranslateToggleButton(showCn = showCn, onClick = onToggleCn)
+            }
+        ),
+        fontSize = fontSize,
+        fontWeight = FontWeight.Bold,
+        lineHeight = (fontSize.value * 1.5f).sp,
+        color = onSurfaceColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(subtitle.id, tokens) {
+                if (onWordClick == null) return@pointerInput
+                detectTapGestures { pos ->
+                    val layout = textLayout ?: return@detectTapGestures
+                    val offset = layout.getOffsetForPosition(pos)
+                    currentTokens.firstOrNull { offset >= it.start && offset <= it.end + 1 }
+                        ?.let { onWordClick(it.word, it.timeStart) }
+                }
+            }
+    )
 }
 
 /** 句末"文/A"翻译切换图标（Web Languages 按钮）：点亮=翻译可见，点击临时开/关中文翻译 */

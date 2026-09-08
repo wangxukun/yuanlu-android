@@ -105,6 +105,7 @@ import com.wxkzd.yuanlu.feature.player.Primary50
 import com.wxkzd.yuanlu.feature.player.Primary600
 import com.wxkzd.yuanlu.feature.player.Primary900
 import com.wxkzd.yuanlu.feature.player.isDarkAppearance
+import com.wxkzd.yuanlu.feature.vocabulary.VocabularySheet
 import com.wxkzd.yuanlu.ui.components.EmptyBox
 import com.wxkzd.yuanlu.ui.components.ErrorBox
 import com.wxkzd.yuanlu.ui.components.LoadingBox
@@ -147,6 +148,7 @@ fun IntensiveListeningScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val activeIndex by viewModel.activeSubtitleIndex.collectAsStateWithLifecycle()
+    val wordSheet by viewModel.wordSheet.collectAsStateWithLifecycle()
     val toast by viewModel.toast.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -285,7 +287,7 @@ fun IntensiveListeningScreen(
     }
 
     // ---- 查词弹层（点词触发） ----
-    uiState.wordSheet?.let { sheet ->
+    wordSheet?.let { sheet ->
         VocabularySheet(
             sheet = sheet,
             episodeTitle = uiState.episode?.title,

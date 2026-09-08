@@ -8,10 +8,11 @@ import com.wxkzd.yuanlu.core.media.LoopMode
 import com.wxkzd.yuanlu.core.media.PlayerController
 import com.wxkzd.yuanlu.core.media.PlayerState
 import com.wxkzd.yuanlu.core.network.Result
-import com.wxkzd.yuanlu.domain.model.DictEntry
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.Subtitle
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
+import com.wxkzd.yuanlu.feature.vocabulary.WordLookupController
+import com.wxkzd.yuanlu.feature.vocabulary.WordSheetState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,18 +28,6 @@ import javax.inject.Inject
 
 /** 精听模式：精读（跟读）/ 听写（DictationItem），对齐 Web transcriptMode */
 enum class TranscriptMode { READ, DICTATE }
-
-/** 查词弹层状态（对齐 Web VocabularyModal 所需数据） */
-data class WordSheetState(
-    val word: String,
-    val contextEn: String,
-    val contextCn: String,
-    val timestampSec: Int,
-    val entry: DictEntry? = null,
-    val isLoading: Boolean = true,
-    val isSaving: Boolean = false,
-    val isSaved: Boolean = false
-)
 
 /** 精听页 UI 状态：剧集 + 字幕（+音频直链）+ 阅读辅助开关 */
 data class IntensiveUiState(
@@ -64,9 +53,7 @@ data class IntensiveUiState(
     /** 本轮听写已完成（末句拼写正确后置位，触发结算弹层并停止循环） */
     val dictationFinished: Boolean = false,
     /** 精读 / 听写模式（听写：0.8 倍速 + 当前句自动循环 + 拼写校验） */
-    val transcriptMode: TranscriptMode = TranscriptMode.READ,
-    /** 查词弹层；null 关闭 */
-    val wordSheet: WordSheetState? = null
+    val transcriptMode: TranscriptMode = TranscriptMode.READ
 )
 
 /**
@@ -109,8 +96,16 @@ class IntensiveListeningViewModel @Inject constructor(
     /** 进入听写模式前的用户倍速（切回精读时恢复，而非硬编码 1x） */
     private var rateBeforeDictate = 1f
 
-    /** 已保存生词缓存（登录后懒加载，用于查词弹层已保存态） */
-    private var savedWords: Set<String>? = null
+    /** 点词查词共享控制器（与语音评测页同一套查词/保存口径） */
+    private val wordLookup = WordLookupController(
+        contentRepository = contentRepository,
+        tokenStore = tokenStore,
+        scope = viewModelScope,
+        onToast = { _toast.value = it }
+    )
+
+    /** 查词弹层状态；null 关闭 */
+    val wordSheet: StateFlow<WordSheetState?> get() = wordLookup.wordSheet
 
     init {
         // 循环边界：单句循环锁定句；听写模式跟随显式 dictationIndex（对齐 Web loopTarget 逻辑）。
@@ -296,107 +291,22 @@ class IntensiveListeningViewModel @Inject constructor(
         playerController.setLoopMode(next)
     }
 
-    // ---------- 点词查词（对齐 Web handleWordClick / handleSaveVocabulary） ----------
+    // ---------- 点词查词（共享控制器，对齐 Web handleWordClick / handleSaveVocabulary） ----------
 
-    /** 点词：清理标点后暂停播放并打开查词弹层（游客可查，保存需登录） */
+    /** 点词：跟读中先暂停播放，再交给共享查词控制器打开弹层 */
     fun onWordClick(rawWord: String, contextEn: String, contextCn: String, timestampSec: Double) {
-        val cleanWord = rawWord.replace(Regex("[.,!?;:\\\"()\\[\\]]"), "").trim()
-        if (cleanWord.isEmpty()) return
         if (playerState.value.isPlaying) playerController.pause()
-
-        val alreadySaved = savedWords?.contains(cleanWord.lowercase()) ?: false
-        _uiState.update {
-            it.copy(
-                wordSheet = WordSheetState(
-                    word = cleanWord,
-                    contextEn = contextEn,
-                    contextCn = contextCn,
-                    timestampSec = timestampSec.toInt(),
-                    isSaved = alreadySaved
-                )
-            )
-        }
-        viewModelScope.launch {
-            when (val result = contentRepository.lookupWord(cleanWord)) {
-                is Result.Success -> _uiState.update { s ->
-                    s.copy(wordSheet = s.wordSheet?.copy(entry = result.data, isLoading = false))
-                }
-                is Result.Error -> {
-                    _uiState.update { s ->
-                        s.copy(wordSheet = s.wordSheet?.copy(isLoading = false))
-                    }
-                    _toast.value = result.message
-                }
-                Result.NetworkError -> {
-                    _uiState.update { s -> s.copy(wordSheet = s.wordSheet?.copy(isLoading = false)) }
-                    _toast.value = "网络错误，请重试"
-                }
-            }
-        }
-        // 登录用户懒加载已保存生词集合
-        if (savedWords == null) {
-            viewModelScope.launch {
-                if (tokenStore.getToken() == null) return@launch
-                when (val result = contentRepository.getVocabularyWords()) {
-                    is Result.Success -> {
-                        savedWords = result.data
-                        _uiState.update { s ->
-                            s.copy(wordSheet = s.wordSheet?.copy(
-                                isSaved = result.data.contains(cleanWord.lowercase())
-                            ))
-                        }
-                    }
-                    else -> Unit
-                }
-            }
-        }
+        wordLookup.onWordClick(rawWord, contextEn, contextCn, timestampSec)
     }
 
     fun closeWordSheet() {
-        _uiState.update { it.copy(wordSheet = null) }
+        wordLookup.closeWordSheet()
     }
 
-    /** 保存当前查词单词进生词本（对齐 Web handleSaveVocabulary 的字段拼装） */
+    /** 保存当前查词单词进生词本 */
     fun saveCurrentWord() {
-        val ui = _uiState.value
-        val sheet = ui.wordSheet ?: return
-        if (sheet.isSaving || sheet.isSaved) return
         val episodeid = loadedEpisodeId ?: return
-        val definition = sheet.entry?.definitions
-            ?.joinToString("; ") { "[${it.pos}] ${it.meaningCn}" }
-            .orEmpty()
-        viewModelScope.launch {
-            // 登录检查（DataStore 挂起读取）
-            if (tokenStore.getToken() == null) {
-                _toast.value = "请先登录后再保存生词"
-                return@launch
-            }
-            _uiState.update { s -> s.copy(wordSheet = s.wordSheet?.copy(isSaving = true)) }
-            val speakUrl = sheet.entry?.audioUs ?: sheet.entry?.audioUk ?: ""
-            when (val result = contentRepository.addVocabulary(
-                word = sheet.word,
-                definition = definition,
-                contextSentence = sheet.contextEn,
-                translation = sheet.contextCn,
-                episodeid = episodeid,
-                timestampSec = sheet.timestampSec,
-                speakUrl = speakUrl
-            )) {
-                is Result.Success -> {
-                    savedWords = (savedWords ?: emptySet()) + sheet.word.lowercase()
-                    _uiState.update { s -> s.copy(wordSheet = s.wordSheet?.copy(isSaving = false, isSaved = true)) }
-                    _toast.value = "已加入生词本"
-                }
-                is Result.Error -> {
-                    _uiState.update { s -> s.copy(wordSheet = s.wordSheet?.copy(isSaving = false)) }
-                    _toast.value = result.message
-                }
-                Result.NetworkError -> {
-                    _uiState.update { s -> s.copy(wordSheet = s.wordSheet?.copy(isSaving = false)) }
-                    _toast.value = "网络错误，请重试"
-                }
-            }
-        }
+        wordLookup.saveCurrentWord(episodeid)
     }
 
     // ---------- 播放控制直通全局 PlayerController（与迷你条/全屏播放器实时同步） ----------

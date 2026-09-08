@@ -1,4 +1,4 @@
-package com.wxkzd.yuanlu.feature.intensive
+package com.wxkzd.yuanlu.feature.vocabulary
 
 import android.media.MediaPlayer
 import androidx.compose.animation.AnimatedVisibility
@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.wxkzd.yuanlu.domain.model.DictEntry
 import com.wxkzd.yuanlu.feature.player.Ink300
 import com.wxkzd.yuanlu.feature.player.Ink400
 import com.wxkzd.yuanlu.feature.player.Ink600
@@ -62,6 +63,21 @@ import com.wxkzd.yuanlu.feature.player.Ink50
 import com.wxkzd.yuanlu.feature.player.Primary400
 import com.wxkzd.yuanlu.feature.player.Primary600
 import com.wxkzd.yuanlu.feature.player.isDarkAppearance
+
+/**
+ * 查词弹层状态（对齐 Web VocabularyModal 所需数据）：
+ * 由 [WordLookupController] 维护，精听 / 语音评测页面共用同一份查词口径。
+ */
+data class WordSheetState(
+    val word: String,
+    val contextEn: String,
+    val contextCn: String,
+    val timestampSec: Int,
+    val entry: DictEntry? = null,
+    val isLoading: Boolean = true,
+    val isSaving: Boolean = false,
+    val isSaved: Boolean = false
+)
 
 /**
  * 查词弹层（复刻 Web VocabularyModal 移动端底部弹层形态）：

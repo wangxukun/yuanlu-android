@@ -51,6 +51,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wxkzd.yuanlu.domain.model.EvalPhase
+import com.wxkzd.yuanlu.feature.vocabulary.VocabularySheet
 import com.wxkzd.yuanlu.ui.components.ErrorBox
 
 /**
@@ -65,6 +66,7 @@ fun SpeechEvalRoute(
     viewModel: SpeechEvalViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val wordSheet by viewModel.wordSheet.collectAsStateWithLifecycle()
 
     // Toast 一次性消费
     val context = LocalContext.current
@@ -175,7 +177,10 @@ fun SpeechEvalRoute(
                         onPlayWordMe = viewModel::playWordMe,
                         onPrefetchIpa = viewModel::prefetchIpa,
                         onToggleBlindReveal = viewModel::toggleBlindReveal,
-                        onShowLatestScore = viewModel::showLatestScore
+                        onShowLatestScore = viewModel::showLatestScore,
+                        highlightPositionMs = viewModel.highlightPositionMs,
+                        savedWords = viewModel.savedWords,
+                        onWordClick = viewModel::onWordClick
                     )
                     if (state.isTrialMode && state.index == state.subtitles.lastIndex) {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -247,6 +252,16 @@ fun SpeechEvalRoute(
             onClose = { showSettings = false },
             onUpdateSettings = viewModel::updateSettings,
             onSetThemeMode = viewModel::setThemeMode
+        )
+    }
+
+    // ---- 查词弹层（点词触发，与精听页共用同一组件与保存口径） ----
+    wordSheet?.let { sheet ->
+        VocabularySheet(
+            sheet = sheet,
+            episodeTitle = state.episodeTitle,
+            onSave = viewModel::saveCurrentWord,
+            onClose = viewModel::closeWordSheet
         )
     }
 }
