@@ -156,11 +156,20 @@ class SpeechEvalViewModel @Inject constructor(
     /** 全量字幕的内存副本（过滤时用；loaded 后与 records 一起构成过滤输入） */
     private var allSubtitles: List<Subtitle> = emptyList()
 
+    /**
+     * 每句最近一次评测结果缓存（subtitleId → 结果）：
+     * 结果对象同时携带本地录音路径（userAudioPath，"回放我的发音"/词级"我"依赖）
+     * 与逐词明细（words + 音素，逐词纠错面板依赖）。UI 状态里的 result 只是当前句
+     * 的投影，切句时据此字典恢复，对齐 Web previousResult 按句持久、跨卡片不丢的口径。
+     */
+    private val resultCache = HashMap<Int, SpeechEvalResult>()
+
     // ---------- 数据加载 ----------
 
     fun load(episodeId: String) {
         if (this.episodeId == episodeId && _uiState.value.subtitles.isNotEmpty()) return
         this.episodeId = episodeId
+        resultCache.clear()
         _uiState.update { SpeechEvalUiState(settings = it.settings, themeMode = it.themeMode) }
         // 剧集标题仅供查词弹层底栏"来源"展示，静默失败不影响练习
         viewModelScope.launch {
@@ -241,18 +250,21 @@ class SpeechEvalViewModel @Inject constructor(
         if (index < 0 || index > state.subtitles.lastIndex || index == state.index) return
         stopPlayback()
         advanceJob?.cancel()
-        // 音标缓存按词复用，跨句保留
+        // 音标缓存按词复用，跨句保留；已评测句从结果缓存恢复结果面
+        // （录音回放路径 + 逐词/音素明细随句恢复，selectedWordIndex 重选、盲读重新遮挡）
+        val target = state.subtitles[index]
+        val restored = resultCache[target.id]
         _uiState.update {
             it.copy(
                 index = index,
-                phase = EvalPhase.IDLE,
-                result = null,
+                phase = if (restored != null) EvalPhase.RESULT else EvalPhase.IDLE,
+                result = restored,
                 selectedWordIndex = null,
                 amplitudes = emptyList(),
                 blindRevealed = false
             )
         }
-        prefetchIpa(state.subtitles[index])
+        prefetchIpa(target)
     }
 
     // ---------- 字幕音标（IPA 文本模式） ----------
@@ -328,6 +340,8 @@ class SpeechEvalViewModel @Inject constructor(
             when (val r = speechRepository.evaluate(episodeId, sub.id, sub.textEn, wav)) {
                 is Result.Success -> {
                     val evaluated = r.data.copy(userAudioPath = localPath)
+                    // 按句缓存最近一次结果：切句返回时恢复"回放我的发音"与逐词/音素明细
+                    resultCache[sub.id] = evaluated
                     val newRecord = SpeechPracticeRecord(
                         recognitionid = evaluated.recognitionId ?: System.currentTimeMillis(),
                         accuracyScore = evaluated.pronunciation,
