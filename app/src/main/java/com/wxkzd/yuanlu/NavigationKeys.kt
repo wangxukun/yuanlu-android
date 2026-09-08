@@ -39,8 +39,15 @@ import kotlinx.serialization.Serializable
 @Serializable data class LearningPathDetailNav(val pathId: Int) : NavKey
 
 
-/** 语音评测：由剧集详情「语音评测」按钮进入，携带当前 episodeId */
-@Serializable data class SpeechEvalNav(val episodeid: String) : NavKey
+/**
+ * 语音评测：由剧集详情「语音评测」按钮进入，携带当前 episodeId；
+ * 发音弱项本的弱项句子卡片进入时额外携带 subtitleId，
+ * 直接定位该句录音卡（对齐 Web /episode/{id}?practice=true&subtitleId= 参数）。
+ */
+@Serializable data class SpeechEvalNav(
+    val episodeid: String,
+    val subtitleId: Int? = null
+) : NavKey
 
 /** 发音弱项本主页（能力画像/音素诊断/弱项列表，复刻 Web /library/pronunciation），需登录 */
 @Serializable data object PronunciationNotebookNav : NavKey

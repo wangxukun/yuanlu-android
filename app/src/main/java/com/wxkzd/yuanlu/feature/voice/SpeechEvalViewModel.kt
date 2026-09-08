@@ -166,7 +166,12 @@ class SpeechEvalViewModel @Inject constructor(
 
     // ---------- 数据加载 ----------
 
-    fun load(episodeId: String) {
+    /**
+     * @param focusSubtitleId 定位目标句（发音弱项本句子卡片直达）；null 从首句开始。
+     * 加载成功后按 subtitleId 在过滤集中精确匹配，未命中（历史记录无 id 或被
+     * 词数/只练未掌握过滤掉）回退首句。
+     */
+    fun load(episodeId: String, focusSubtitleId: Int? = null) {
         if (this.episodeId == episodeId && _uiState.value.subtitles.isNotEmpty()) return
         this.episodeId = episodeId
         resultCache.clear()
@@ -182,13 +187,25 @@ class SpeechEvalViewModel @Inject constructor(
             when (val result = speechRepository.getPracticeData(episodeId)) {
                 is Result.Success -> {
                     allSubtitles = result.data.subtitles
-                    _uiState.update { state ->
-                        val filtered = applyFilters(result.data.subtitles, result.data.records, state.settings)
-                        state.copy(
+                    val state = _uiState.value
+                    val filtered = applyFilters(result.data.subtitles, result.data.records, state.settings)
+                    // 弱项句子直达定位：过滤集内按 subtitleId 命中；被过滤条件排除时
+                    // 定位到目标之后最近的可见句并提示（Web pendingSubtitleId 同口径）
+                    val hit = focusSubtitleId?.let { id -> filtered.indexOfFirst { it.id == id } }
+                    val focusIndex = when {
+                        hit != null && hit >= 0 -> hit
+                        focusSubtitleId != null -> {
+                            _toast.value = "该句被当前过滤条件排除，已定位到最近的句子"
+                            nearestVisibleIndexAfter(filtered, result.data.subtitles, focusSubtitleId)
+                        }
+                        else -> 0
+                    }
+                    _uiState.update {
+                        it.copy(
                             isLoading = false,
                             audioUrl = result.data.audioUrl,
                             subtitles = filtered,
-                            index = 0,
+                            index = focusIndex,
                             records = result.data.records,
                             isTrialMode = result.data.isTrialMode
                         )
@@ -204,7 +221,15 @@ class SpeechEvalViewModel @Inject constructor(
         }
     }
 
-    fun retry() { load(episodeId) }
+    /** 重试加载：保持当前练习句（而非重置回首句） */
+    fun retry() { load(episodeId, _uiState.value.current?.id) }
+
+    /** 目标句被过滤条件排除时的兜底：完整列表中目标之后（startSeconds ≥ 目标）最近的可见句，末句封底 */
+    private fun nearestVisibleIndexAfter(filtered: List<Subtitle>, all: List<Subtitle>, subtitleId: Int): Int {
+        val targetStart = all.firstOrNull { it.id == subtitleId }?.start ?: return 0
+        val after = filtered.indexOfFirst { it.start >= targetStart }
+        return if (after >= 0) after else filtered.lastIndex.coerceAtLeast(0)
+    }
 
     /** Web ImmersiveSpeechPractice 的过滤口径：词数区间 + 只练未掌握 */
     private fun applyFilters(

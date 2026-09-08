@@ -231,10 +231,12 @@ private fun AppNavHost(
                         onOpenSpeechEval = { open(SpeechEvalNav(it)) }
                     )
                 }
-                // 语音评测：剧集详情「语音评测」按钮进入（复刻 Web ImmersiveSpeechPractice）
+                // 语音评测：剧集详情「语音评测」按钮进入（复刻 Web ImmersiveSpeechPractice）；
+                // 发音弱项本句子卡片携带 subtitleId 直达定位该句录音卡
                 entry<SpeechEvalNav> { key ->
                     SpeechEvalRoute(
                         episodeid = key.episodeid,
+                        focusSubtitleId = key.subtitleId,
                         onBack = { back() }
                     )
                 }
@@ -247,7 +249,9 @@ private fun AppNavHost(
                         onBack = { back() },
                         onOpenPractice = { open(WeaknessPracticeNav) },
                         onOpenLeaderboard = { open(SpeechLeaderboardNav) },
-                        onOpenEpisode = { open(PlayerNav(it)) },
+                        onOpenSpeechEval = { episodeid, subtitleId ->
+                            open(SpeechEvalNav(episodeid, subtitleId))
+                        },
                         viewModel = notebookViewModel
                     )
                 }

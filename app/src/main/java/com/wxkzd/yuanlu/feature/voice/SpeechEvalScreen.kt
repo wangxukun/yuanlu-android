@@ -57,11 +57,12 @@ import com.wxkzd.yuanlu.ui.components.ErrorBox
 /**
  * 语音评测页（复刻 Web ImmersiveSpeechPractice 沉浸式练习）：
  * 顶部导航（收起/标题/设置）+ 单句评测卡（录音 ⇄ 结果）+ 底部上一句/下一句与进度。
- * 由剧集详情页「语音评测」按钮进入。
+ * 由剧集详情页「语音评测」按钮进入；发音弱项本句子卡片携带 subtitleId 直达定位该句。
  */
 @Composable
 fun SpeechEvalRoute(
     episodeid: String,
+    focusSubtitleId: Int? = null,
     onBack: () -> Unit,
     viewModel: SpeechEvalViewModel = hiltViewModel()
 ) {
@@ -79,8 +80,8 @@ fun SpeechEvalRoute(
         }
     }
 
-    // 每次进入拉取练习数据（对齐 Web 挂载即取）
-    LaunchedEffect(episodeid) { viewModel.load(episodeid) }
+    // 每次进入拉取练习数据（对齐 Web 挂载即取）；携带 subtitleId 时直接定位目标句
+    LaunchedEffect(episodeid, focusSubtitleId) { viewModel.load(episodeid, focusSubtitleId) }
 
     // 麦克风运行时权限：请求通过后再启动录音
     val permissionLauncher = rememberLauncherForActivityResult(

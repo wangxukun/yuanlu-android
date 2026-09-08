@@ -83,7 +83,7 @@ fun PronunciationNotebookRoute(
     onBack: () -> Unit,
     onOpenPractice: () -> Unit,
     onOpenLeaderboard: () -> Unit,
-    onOpenEpisode: (String) -> Unit,
+    onOpenSpeechEval: (episodeid: String, subtitleId: Int?) -> Unit,
     viewModel: PronunciationNotebookViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -146,7 +146,7 @@ fun PronunciationNotebookRoute(
                             PhonemeRadarCard(notebook)
                             WeakSentenceListCard(
                                 notebook = notebook,
-                                onOpenEpisode = onOpenEpisode
+                                onOpenSpeechEval = onOpenSpeechEval
                             )
                             Spacer(modifier = Modifier.height(88.dp))
                         }
@@ -569,7 +569,7 @@ private fun PhonemeRadarCard(notebook: SpeechNotebook) {
 @Composable
 private fun WeakSentenceListCard(
     notebook: SpeechNotebook,
-    onOpenEpisode: (String) -> Unit
+    onOpenSpeechEval: (episodeid: String, subtitleId: Int?) -> Unit
 ) {
     val context = LocalContext.current
     CardShell {
@@ -621,8 +621,9 @@ private fun WeakSentenceListCard(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 notebook.errors.forEach { record ->
+                    // 点卡片直达语音评测并定位该句录音卡（对齐 Web practice=true&subtitleId= 跳转）
                     WeakSentenceRow(record = record) {
-                        record.episodeid?.let(onOpenEpisode)
+                        record.episodeid?.let { onOpenSpeechEval(it, record.subtitleId) }
                     }
                 }
                 // 非会员试用：剩余弱项句子锁定卡
