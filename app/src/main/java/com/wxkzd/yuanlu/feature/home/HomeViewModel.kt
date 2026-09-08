@@ -11,6 +11,7 @@ import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -110,7 +111,7 @@ class HomeViewModel @Inject constructor(
             var lastError: String? = null
             var networkFailed = false
             coroutineScope {
-                // 8 路并发（仓库层已把异常折叠为 Result，async 不会向上抛）
+                // 7 路并发（仓库层已把异常折叠为 Result，async 不会向上抛）
                 val profileDeferred = async { authRepository.getProfile() }
                 val statsDeferred = async { authRepository.getStatsOverview() }
                 val weekNowDeferred = async { authRepository.getWeeklyActivity(0) }
@@ -120,9 +121,6 @@ class HomeViewModel @Inject constructor(
                 val vocabDeferred = async { contentRepository.getAllVocabulary() }
                 val episodesDeferred =
                     async { contentRepository.getLatestEpisodes(1, EPISODE_FETCH_SIZE) }
-                // /api/episode/list 的 coverUrl 未签名（Web 端在服务端签名），
-                // 借 /api/podcast/list 的已签名专辑封面做剧集封面回退
-                val podcastsDeferred = async { contentRepository.getPodcasts() }
 
                 fun <T> Result<T>.folded(): T? = when (this) {
                     is Result.Success -> {
@@ -145,14 +143,13 @@ class HomeViewModel @Inject constructor(
                 val weekLast = weekLastDeferred.await().folded()
                 val history = historyDeferred.await().folded()
                 val vocab = vocabDeferred.await().folded()
-                val episodes = episodesDeferred.await().folded()
-                val podcasts = podcastsDeferred.await().folded()
+                val episodes = enrichEpisodes(episodesDeferred.await().folded())
 
                 if (anySuccess) {
                     _uiState.update {
                         buildState(
                             it, profile, stats?.streakDays, weekNow, weekLast,
-                            history, vocab, episodes, podcasts
+                            history, vocab, episodes
                         )
                     }
                 }
@@ -174,6 +171,40 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 剧集富化：/api/episode/list 的 coverUrl 未签名（直接加载 403）且缺
+     * duration/difficulty/playCount；借 /api/episode/list-by-podcastid
+     * （剧集自身签名封面 + 全字段）按 podcastid 分组并发补齐。
+     * 封面只取剧集自身，绝不回退到所属播客的专辑封面。
+     */
+    private suspend fun enrichEpisodes(pool: List<Episode>?): List<Episode>? {
+        if (pool.isNullOrEmpty()) return pool
+        val podcastIds = pool.mapNotNull { it.podcastid }.distinct().take(MAX_ENRICH_PODCASTS)
+        if (podcastIds.isEmpty()) return pool
+        val richById = coroutineScope {
+            podcastIds.map { pid ->
+                async {
+                    (contentRepository.getPodcastEpisodes(
+                        podcastid = pid,
+                        page = 1,
+                        limit = ENRICH_PAGE_LIMIT,
+                        ascending = false
+                    ) as? Result.Success)?.data?.episodes.orEmpty()
+                }
+            }.awaitAll().flatten()
+        }.associateBy { it.episodeid }
+        if (richById.isEmpty()) return pool
+        return pool.map { base ->
+            val rich = richById[base.episodeid] ?: return@map base
+            base.copy(
+                coverUrl = rich.coverUrl ?: base.coverUrl,
+                duration = if (rich.duration > 0) rich.duration else base.duration,
+                playCount = if (rich.playCount > 0) rich.playCount else base.playCount,
+                difficulty = rich.difficulty ?: base.difficulty
+            )
+        }
+    }
+
     private fun buildState(
         previous: HomeUiState,
         profile: UserProfile?,
@@ -182,8 +213,7 @@ class HomeViewModel @Inject constructor(
         weekLast: List<com.wxkzd.yuanlu.domain.model.WeeklyActivityItem>?,
         history: com.wxkzd.yuanlu.domain.model.HistoryPage?,
         vocab: List<VocabularyItem>?,
-        episodes: List<Episode>?,
-        podcasts: List<com.wxkzd.yuanlu.domain.model.Podcast>?
+        episodes: List<Episode>?
     ): HomeUiState {
         val displayName = profile?.nickname?.takeIf { it.isNotBlank() } ?: "朋友"
         val bio = profile?.bio?.takeIf { it.isNotBlank() } ?: HomeUiState.DEFAULT_BIO
@@ -217,14 +247,7 @@ class HomeViewModel @Inject constructor(
 
         // ---- 继续收听：第 1 条给顶部续播卡，其余给横向列表 ----
         val historyItems = history?.items.orEmpty()
-        // 剧集封面回退：podcast.list 的封面已签名（episode.list 的 coverUrl
-        // 可能缺省或未签名 403），CoverImage 主 URL 失败后自动降级到专辑封面
-        val podcastCovers = podcasts?.filterNot { it.coverUrl.isNullOrBlank() }
-            ?.associate { it.podcastid to it.coverUrl }
-            .orEmpty()
-        val episodesSorted = episodes.orEmpty().map { ep ->
-            ep.copy(coverFallbackUrl = ep.podcastid?.let { podcastCovers[it] })
-        }
+        val episodesSorted = episodes.orEmpty()
 
         // ---- 为你推荐：learnLevel → CEFR 难度映射（对齐 Web LEVEL_MAPPING） ----
         val level = profile?.learnLevel?.takeIf { it.isNotBlank() } ?: "General"
@@ -291,12 +314,16 @@ class HomeViewModel @Inject constructor(
     companion object {
         /** 首页收听历史拉取量：1 条给顶部续播卡 + 4 条给继续收听列表（Web 同口径取 4） */
         const val HISTORY_SIZE = 5
-        /** 最新发布展示数（Web getRecentPublishedEpisodes(8)） */
-        const val LATEST_LIMIT = 8
+        /** 最新发布展示数（首页两模块均为纵向 4 行列表） */
+        const val LATEST_LIMIT = 4
         /** 为你推荐展示数（Web getRecommendedEpisodes 默认 4） */
         const val RECOMMEND_LIMIT = 4
         /** 推荐难度过滤的候选池大小 */
         const val EPISODE_FETCH_SIZE = 50
+        /** 剧集富化：最多并发查询的播客数（超出部分的剧集保持列表端点原值） */
+        const val MAX_ENRICH_PODCASTS = 6
+        /** 单播客富化拉取的剧集数上限 */
+        const val ENRICH_PAGE_LIMIT = 100
 
         /** 步行速度 5km/h → 1 小时收听 = 5km 里程（对齐 Web WeeklyMileageCard） */
         const val KM_PER_HOUR = 5.0

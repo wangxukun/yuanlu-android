@@ -112,11 +112,25 @@ class HomeViewModelTest {
                     episode("e8"),
                     episode("e9")
                 ),
-                podcasts = listOf(
-                    Podcast(
-                        podcastid = "p1",
-                        title = "六分钟英语",
-                        coverUrl = "https://cdn.example.com/cover.jpg?Signature=abc"
+                // list-by-podcastid 富化源：剧集自身签名封面 + 时长/播放量/难度
+                podcastEpisodes = mapOf(
+                    "p1" to listOf(
+                        Episode(
+                            episodeid = "e1",
+                            title = "Episode e1",
+                            coverUrl = "https://cdn.example.com/signed-e1.jpg",
+                            duration = 600,
+                            playCount = 1200,
+                            difficulty = "A1"
+                        ),
+                        Episode(
+                            episodeid = "e2",
+                            title = "Episode e2",
+                            coverUrl = "https://cdn.example.com/signed-e2.jpg",
+                            duration = 480,
+                            playCount = 30,
+                            difficulty = "A2"
+                        )
                     )
                 ),
                 history = HistoryPage(
@@ -155,13 +169,13 @@ class HomeViewModelTest {
         // 为你推荐：Beginner → A1/A2
         assertEquals("Beginner", state.recommendedLevel)
         assertEquals(listOf("e1", "e2"), state.recommended.map { it.episodeid })
-        // 剧集封面回退到已签名的播客封面
-        assertEquals(
-            "https://cdn.example.com/cover.jpg?Signature=abc",
-            state.recommended.first().coverFallbackUrl
-        )
-        // 最新发布：最多 8 条
-        assertEquals(8, state.latestEpisodes.size)
+        // 剧集富化：封面换为剧集自身签名直链，时长/播放量补齐，且绝不回退播客封面
+        assertEquals("https://cdn.example.com/signed-e1.jpg", state.recommended.first().coverUrl)
+        assertEquals(null, state.recommended.first().coverFallbackUrl)
+        assertEquals(600, state.recommended.first().duration)
+        assertEquals(1200, state.recommended.first().playCount)
+        // 最新发布：纵向列表固定 4 条
+        assertEquals(4, state.latestEpisodes.size)
     }
 
     @Test
@@ -290,7 +304,7 @@ private class FakeAuthRepository(
 
 private class FakeContentRepository(
     private val episodes: List<Episode> = emptyList(),
-    private val podcasts: List<Podcast> = emptyList(),
+    private val podcastEpisodes: Map<String, List<Episode>> = emptyMap(),
     private val history: HistoryPage = HistoryPage(),
     private val vocab: List<VocabularyItem> = emptyList(),
     private val failure: Result<*>? = null
@@ -308,14 +322,15 @@ private class FakeContentRepository(
     override suspend fun getSubtitles(episodeid: String): Result<SubtitleBundle> =
         Result.Success(SubtitleBundle(emptyList(), null))
 
+    /** 首页剧集富化源：list-by-podcastid 的签名封面 + 时长/播放量/难度 */
     override suspend fun getPodcastEpisodes(
         podcastid: String,
         page: Int,
         limit: Int,
         ascending: Boolean
-    ): Result<EpisodePage> = Result.Success(EpisodePage(emptyList(), 0, false))
+    ): Result<EpisodePage> = result(EpisodePage(podcastEpisodes[podcastid].orEmpty(), 0, false))
 
-    override suspend fun getPodcasts(): Result<List<Podcast>> = result(podcasts)
+    override suspend fun getPodcasts(): Result<List<Podcast>> = Result.Success(emptyList())
 
     override suspend fun getPodcastDetail(podcastid: String): Result<PodcastDetail> =
         Result.Success(PodcastDetail(Podcast(podcastid = podcastid, title = ""), false, emptyList()))

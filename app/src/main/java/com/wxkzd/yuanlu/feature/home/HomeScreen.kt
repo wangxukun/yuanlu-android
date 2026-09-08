@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,14 +19,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -39,7 +34,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,7 +61,6 @@ import com.wxkzd.yuanlu.ui.components.HeadsetIcon
 import com.wxkzd.yuanlu.ui.components.ScheduleIcon
 import com.wxkzd.yuanlu.ui.components.ShimmerBox
 import com.wxkzd.yuanlu.ui.components.formatDuration
-import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -768,236 +761,147 @@ private fun ContinueCard(item: HistoryItem, onClick: () -> Unit) {
 }
 
 /**
- * 为你推荐（⚠️ 与 Web 垂直布局差异化：左右水平排列）：
- * 左侧固定 16:9 封面（PRO/难度角标），右侧自适应填充标题、来源平台与时长/播放量。
+ * 为你推荐（纵向 4 行列表，卡片与「最新发布」共用 [HomeHorizontalEpisodeCard]，
+ * 整体风格对齐「我的收藏 → 单集」剧集卡片）。
  */
 @Composable
 private fun RecommendedSection(
     episodes: List<Episode>,
     onPlay: (String) -> Unit
 ) {
-    Column {
-        SectionTitle(title = "为你推荐")
-        Spacer(modifier = Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(episodes, key = { it.episodeid }) { episode ->
-                RecommendedEpisodeCard(episode = episode, onClick = { onPlay(episode.episodeid) })
-            }
-        }
-    }
+    EpisodeListSection(title = "为你推荐", episodes = episodes, onPlay = onPlay)
 }
 
-/** 推荐卡：封面在左、信息在右的水平布局 */
-@Composable
-private fun RecommendedEpisodeCard(episode: Episode, onClick: () -> Unit) {
-    HomeCard(
-        modifier = Modifier
-            .width(304.dp)
-            .clickable { onClick() }
-    ) {
-        Row {
-            Box(
-                modifier = Modifier
-                    .width(132.dp)
-                    .aspectRatio(16f / 9f)
-            ) {
-                CoverImage(
-                    url = episode.coverUrl,
-                    fallbackUrl = episode.coverFallbackUrl,
-                    contentDescription = episode.title,
-                    modifier = Modifier.fillMaxSize(),
-                    cornerRadius = 0.dp
-                )
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (episode.isExclusive) ProBadge()
-                }
-                episode.difficulty?.let {
-                    DifficultyBadge(level = it, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp))
-                }
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = episode.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = episode.podcastTitle ?: "未知播客",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = ScheduleIcon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = formatDuration(episode.duration),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (episode.playCount > 0) {
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Icon(
-                            imageVector = HeadsetIcon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = episode.playCount.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 最新发布（水平滚动 + 左右切换箭头，对齐 Web HorizontalScrollContainer） */
+/** 最新发布（纵向 4 行列表，取消水平滚动与切换箭头） */
 @Composable
 private fun LatestSection(
     episodes: List<Episode>,
     onPlay: (String) -> Unit
 ) {
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val scrollByPx = with(LocalDensity.current) { 288.dp.toPx() }
-
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "最新发布",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            ArrowButton(icon = Icons.Filled.KeyboardArrowLeft) {
-                scope.launch { listState.animateScrollBy(-scrollByPx) }
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            ArrowButton(icon = Icons.Filled.KeyboardArrowRight) {
-                scope.launch { listState.animateScrollBy(scrollByPx) }
-            }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        LazyRow(
-            state = listState,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(episodes, key = { it.episodeid }) { episode ->
-                LatestEpisodeCard(episode = episode, onClick = { onPlay(episode.episodeid) })
-            }
-        }
-    }
+    EpisodeListSection(title = "最新发布", episodes = episodes, onPlay = onPlay)
 }
 
+/** 首页两模块共用的纵向剧集列表：模块标题 + 上下排列的剧集卡片 */
 @Composable
-private fun ArrowButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
+private fun EpisodeListSection(
+    title: String,
+    episodes: List<Episode>,
+    onPlay: (String) -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .size(32.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-        )
+    Column {
+        SectionTitle(title = title)
+        Spacer(modifier = Modifier.height(12.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            episodes.forEach { episode ->
+                HomeHorizontalEpisodeCard(
+                    episode = episode,
+                    onClick = { onPlay(episode.episodeid) }
+                )
+            }
+        }
     }
 }
 
-/** 最新发布卡：封面在上（PRO/播放量/难度/分类/时长角标）、文字在下（对齐 Web RecentEpisodes） */
+/**
+ * 首页剧集通用卡（为你推荐 / 最新发布共用）：
+ * 结构对齐「我的收藏 → 单集」卡 —— Row 左右布局且垂直居中；
+ * 左侧 140dp 16:9 剧集自身封面（右上难度角标、右下时长角标），
+ * 右侧 标题 → 所属播客 → 播放数（耳机图标）+ 首个标签胶囊。
+ */
 @Composable
-private fun LatestEpisodeCard(episode: Episode, onClick: () -> Unit) {
-    HomeCard(
-        modifier = Modifier
-            .width(256.dp)
+internal fun HomeHorizontalEpisodeCard(
+    episode: Episode,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
             .clickable { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-            ) {
-                CoverImage(
-                    url = episode.coverUrl,
-                    fallbackUrl = episode.coverFallbackUrl,
-                    contentDescription = episode.title,
-                    modifier = Modifier.fillMaxSize(),
-                    cornerRadius = 0.dp
-                )
-                Row(
+        // 左侧封面：只加载剧集自身封面（列表端点未签名时由 ViewModel 富化为签名直链，
+        // 绝不回退所属播客的专辑封面）；难度/时长以叠加层挂在封面右上/右下角
+        Box(
+            modifier = Modifier
+                .width(140.dp)
+                .aspectRatio(16f / 9f)
+        ) {
+            CoverImage(
+                url = episode.coverUrl,
+                contentDescription = episode.title,
+                modifier = Modifier.fillMaxSize(),
+                cornerRadius = 8.dp
+            )
+            episode.difficulty?.let {
+                DifficultyBadge(
+                    level = it,
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (episode.isExclusive) ProBadge()
-                    if (episode.playCount > 0) PlayCountBadge(count = episode.playCount)
-                }
-                episode.difficulty?.let {
-                    DifficultyBadge(level = it, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp))
-                }
-                episode.tags.firstOrNull()?.let { tag ->
-                    CategoryBadge(text = tag.name, modifier = Modifier.align(Alignment.BottomStart).padding(6.dp))
-                }
-                DurationBadge(
-                    text = formatDuration(episode.duration),
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
                 )
             }
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = episode.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            DurationBadge(
+                text = formatDuration(episode.duration),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp)
+            )
+        }
+        // 右侧文本区：标题 / 所属播客 / 播放数 + 首个标签
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = episode.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = episode.podcastTitle ?: "未知播客",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = HeadsetIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.width(2.dp))
                 Text(
-                    text = episode.podcastTitle ?: "未知播客",
+                    text = String.format(Locale.US, "%,d", episode.playCount),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                episode.tags.firstOrNull()?.let { tag ->
+                    Text(
+                        text = tag.name.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
             }
         }
     }
@@ -1052,48 +956,6 @@ private fun MilestoneProgressBar(
     }
 }
 
-/** PRO 徽章：曙光橙描边小胶囊（对齐 Web ProBadge） */
-@Composable
-private fun ProBadge(modifier: Modifier = Modifier) {
-    Text(
-        text = "PRO",
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = 1.sp,
-        color = Accent700,
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .border(1.dp, Accent300, RoundedCornerShape(50))
-            .background(Color(0xF2FAE5C6))
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-    )
-}
-
-/** 播放量角标：深色半透明底 + 耳机图标 */
-@Composable
-private fun PlayCountBadge(count: Int, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xCC14141E))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = HeadsetIcon,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.8f),
-            modifier = Modifier.size(10.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White
-        )
-    }
-}
-
 /** 难度角标：白底彩字（A* 远青 / B1 黛蓝 / B2 橙 / C* 红，对齐 Web DifficultyBadge） */
 @Composable
 private fun DifficultyBadge(level: String, modifier: Modifier = Modifier) {
@@ -1110,39 +972,13 @@ private fun DifficultyBadge(level: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** 分类角标：error-100 底 + 播放小图标（对齐 Web 推荐卡左下角） */
-@Composable
-private fun CategoryBadge(text: String, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xF2F9E0DB))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Filled.PlayArrow,
-            contentDescription = null,
-            tint = Color(0xFFB0442F),
-            modifier = Modifier.size(10.dp)
-        )
-        Spacer(modifier = Modifier.width(2.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFB0442F)
-        )
-    }
-}
-
-/** 时长角标：黑色半透明底 + 时钟图标 */
+/** 时长角标：黑色半透明底 + 时钟图标（0x99000000 口径对齐收藏单集卡） */
 @Composable
 private fun DurationBadge(text: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xB3000000))
+            .background(Color(0x99000000))
             .padding(horizontal = 6.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
