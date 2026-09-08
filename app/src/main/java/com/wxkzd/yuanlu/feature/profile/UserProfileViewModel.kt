@@ -9,10 +9,12 @@ import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -27,6 +29,8 @@ enum class EditProfileTab { PROFILE, GOALS }
 data class UserProfileUiState(
     // ---- 头部资料 ----
     val isLoading: Boolean = true,
+    /** 下拉刷新中（静默重载，保留现有内容，仅顶部转圈） */
+    val isRefreshing: Boolean = false,
     val profile: UserProfile? = null,
     val loadError: String? = null,
     /** 保存成功自增；「我的」Tab 观察它触发资料重载（对齐 Web updateSession 后 fetchProfile） */
@@ -81,11 +85,29 @@ class UserProfileViewModel @Inject constructor(
         loadAchievements()
     }
 
+    /**
+     * 下拉刷新：静默重载四路数据（保留现有内容，仅顶部转圈），
+     * 全部完成后收起指示器。
+     */
+    fun refresh() {
+        if (_uiState.value.isRefreshing) return
+        _uiState.update { it.copy(isRefreshing = true) }
+        viewModelScope.launch {
+            joinAll(
+                loadProfile(silent = true),
+                loadStats(silent = true),
+                loadActivity(_uiState.value.weekOffset, silent = true),
+                loadAchievements(silent = true)
+            )
+            _uiState.update { it.copy(isRefreshing = false) }
+        }
+    }
+
     fun retry() = load()
 
-    private fun loadProfile() {
-        _uiState.update { it.copy(isLoading = true, loadError = null) }
-        viewModelScope.launch {
+    private fun loadProfile(silent: Boolean = false): Job {
+        if (!silent) _uiState.update { it.copy(isLoading = true, loadError = null) }
+        return viewModelScope.launch {
             when (val result = authRepository.getProfile()) {
                 is Result.Success -> _uiState.update {
                     it.copy(isLoading = false, profile = result.data)
@@ -100,9 +122,9 @@ class UserProfileViewModel @Inject constructor(
         }
     }
 
-    private fun loadStats() {
-        _uiState.update { it.copy(statsLoading = true) }
-        viewModelScope.launch {
+    private fun loadStats(silent: Boolean = false): Job {
+        if (!silent) _uiState.update { it.copy(statsLoading = true) }
+        return viewModelScope.launch {
             when (val result = authRepository.getStatsOverview()) {
                 is Result.Success -> _uiState.update {
                     it.copy(statsLoading = false, stats = result.data)
@@ -124,9 +146,9 @@ class UserProfileViewModel @Inject constructor(
         loadActivity(offset)
     }
 
-    private fun loadActivity(offset: Int) {
-        _uiState.update { it.copy(activityLoading = true) }
-        viewModelScope.launch {
+    private fun loadActivity(offset: Int, silent: Boolean = false): Job {
+        if (!silent) _uiState.update { it.copy(activityLoading = true) }
+        return viewModelScope.launch {
             when (val result = authRepository.getWeeklyActivity(offset)) {
                 is Result.Success -> _uiState.update {
                     it.copy(activityLoading = false, weeklyActivity = result.data)
@@ -141,9 +163,9 @@ class UserProfileViewModel @Inject constructor(
         }
     }
 
-    private fun loadAchievements() {
-        _uiState.update { it.copy(achievementsLoading = true) }
-        viewModelScope.launch {
+    private fun loadAchievements(silent: Boolean = false): Job {
+        if (!silent) _uiState.update { it.copy(achievementsLoading = true) }
+        return viewModelScope.launch {
             when (val result = authRepository.getAchievements()) {
                 is Result.Success -> _uiState.update {
                     it.copy(

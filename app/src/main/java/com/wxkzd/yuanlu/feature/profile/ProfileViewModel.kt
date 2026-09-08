@@ -16,6 +16,8 @@ import javax.inject.Inject
 
 data class ProfileUiState(
     val isLoading: Boolean = false,
+    /** 下拉刷新中（静默重载，保留现有用户卡，仅顶部转圈） */
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val profile: UserProfile? = null
 )
@@ -51,6 +53,25 @@ class ProfileViewModel @Inject constructor(
                 }
                 Result.NetworkError -> _uiState.update {
                     it.copy(isLoading = false, error = "网络连接失败")
+                }
+            }
+        }
+    }
+
+    /** 下拉刷新：绕过"已有资料即跳过"的守卫强制重拉（静默，不打断现有用户卡） */
+    fun refresh() {
+        if (_uiState.value.isRefreshing) return
+        _uiState.update { it.copy(isRefreshing = true) }
+        viewModelScope.launch {
+            when (val result = authRepository.getProfile()) {
+                is Result.Success -> _uiState.update {
+                    it.copy(isRefreshing = false, error = null, profile = result.data)
+                }
+                is Result.Error -> _uiState.update {
+                    it.copy(isRefreshing = false, error = result.message)
+                }
+                Result.NetworkError -> _uiState.update {
+                    it.copy(isRefreshing = false, error = "网络连接失败")
                 }
             }
         }

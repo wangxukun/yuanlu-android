@@ -52,6 +52,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -155,13 +156,19 @@ fun PersonalCenterRoute(
                 )
             }
 
-            PersonalCenterContent(
-                state = state,
-                onRetry = viewModel::retry,
-                onChangeWeek = viewModel::changeWeek,
-                onOpenEdit = viewModel::openEdit,
-                onComingSoon = { comingSoon(it) }
-            )
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = viewModel::refresh,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                PersonalCenterContent(
+                    state = state,
+                    onRetry = viewModel::retry,
+                    onChangeWeek = viewModel::changeWeek,
+                    onOpenEdit = viewModel::openEdit,
+                    onComingSoon = { comingSoon(it) }
+                )
+            }
         }
 
         SnackbarHost(

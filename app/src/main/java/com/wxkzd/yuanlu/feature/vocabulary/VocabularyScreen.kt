@@ -53,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -134,20 +135,26 @@ fun VocabularyScreen(viewModel: VocabularyViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        when {
-            state.isLoading -> LoadingBox()
-            state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::load)
-            else -> VocabularyListContent(
-                state = state,
-                onSearch = viewModel::setSearchQuery,
-                onTab = viewModel::setFilterStatus,
-                onSort = viewModel::setSortMethod,
-                onToggleExpand = viewModel::toggleExpanded,
-                onStartReview = viewModel::startReview,
-                onPlayUrl = ::playUrl,
-                onRequestDelete = viewModel::requestDelete,
-                onToggleStatus = viewModel::toggleStatus
-            )
+        PullToRefreshBox(
+            isRefreshing = state.isRefreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            when {
+                state.isLoading -> LoadingBox()
+                state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::load)
+                else -> VocabularyListContent(
+                    state = state,
+                    onSearch = viewModel::setSearchQuery,
+                    onTab = viewModel::setFilterStatus,
+                    onSort = viewModel::setSortMethod,
+                    onToggleExpand = viewModel::toggleExpanded,
+                    onStartReview = viewModel::startReview,
+                    onPlayUrl = ::playUrl,
+                    onRequestDelete = viewModel::requestDelete,
+                    onToggleStatus = viewModel::toggleStatus
+                )
+            }
         }
 
         // 删除确认（对齐 Web modal-bottom 确认弹窗）

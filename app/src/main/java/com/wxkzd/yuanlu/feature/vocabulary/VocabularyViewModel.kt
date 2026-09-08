@@ -27,6 +27,8 @@ data class ReviewResult(
 data class VocabularyUiState(
     // ---- 列表 ----
     val isLoading: Boolean = true,
+    /** 下拉刷新中（静默重载，保留现有内容，仅顶部转圈） */
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val vocabulary: List<VocabularyItem> = emptyList(),
     val filterStatus: VocabStatusTab = VocabStatusTab.LEARNING,
@@ -77,22 +79,32 @@ class VocabularyViewModel @Inject constructor(
         load()
     }
 
-    fun load() {
-        _uiState.update { it.copy(isLoading = true, error = null) }
+    /**
+     * @param silent true = 下拉刷新（保留现有内容仅转圈）；false = 首次/重试（整页 Loading）
+     */
+    fun load(silent: Boolean = false) {
+        if (silent && _uiState.value.isRefreshing) return
+        _uiState.update {
+            if (silent) it.copy(isRefreshing = true, error = null)
+            else it.copy(isLoading = true, error = null)
+        }
         viewModelScope.launch {
             when (val result = contentRepository.getAllVocabulary()) {
                 is Result.Success -> _uiState.update {
-                    it.copy(isLoading = false, vocabulary = result.data)
+                    it.copy(isLoading = false, isRefreshing = false, vocabulary = result.data)
                 }
                 is Result.Error -> _uiState.update {
-                    it.copy(isLoading = false, error = result.message)
+                    it.copy(isLoading = false, isRefreshing = false, error = result.message)
                 }
                 Result.NetworkError -> _uiState.update {
-                    it.copy(isLoading = false, error = "网络连接失败")
+                    it.copy(isLoading = false, isRefreshing = false, error = "网络连接失败")
                 }
             }
         }
     }
+
+    /** 下拉刷新入口 */
+    fun refresh() = load(silent = true)
 
     // ---------- 列表管理 ----------
 

@@ -35,6 +35,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -96,86 +97,92 @@ fun ProfileScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { if (isLoggedIn) viewModel.refresh() },
+            modifier = Modifier.fillMaxSize()
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // ---- 头部用户卡 ----
-            if (!isLoggedIn) {
-                GuestCard(onClick = onLogin)
-            } else {
-                UserCard(
-                    uiState = uiState,
-                    onRetry = viewModel::load
-                )
-            }
-
-            // ---- 学习与记录（仅登录） ----
-            if (isLoggedIn) {
-                MenuCard(title = "学习与记录") {
-                    MenuRow("发音弱项本", Icons.Filled.Mic, MaterialTheme.colorScheme.tertiary) { onOpenPronunciationNotebook() }
-                    MenuRow("学习路径", Icons.Filled.School, MaterialTheme.colorScheme.primary) { onOpenLearningPaths() }
-                    MenuRow("收听历史", Icons.Filled.History, MaterialTheme.colorScheme.secondary) { onOpenListeningHistory() }
-                    MenuRow("我的收藏", Icons.Filled.Bookmark, Color(0xFFB96F0F)) { onOpenFavorites() }
-                }
-            }
-
-            // ---- 账户与系统设置 ----
-            MenuCard(title = "账户与系统设置") {
-                if (isLoggedIn) {
-                    MenuRow("个人中心", Icons.Filled.Person, MaterialTheme.colorScheme.primary) { onOpenPersonalCenter() }
-                    MenuRow("我的订阅", Icons.Filled.CreditCard, MaterialTheme.colorScheme.secondary) { comingSoon("我的订阅") }
-                    if (uiState.profile?.role == "ADMIN") {
-                        MenuRow("控制台", Icons.Filled.Computer, MaterialTheme.colorScheme.error) { comingSoon("控制台") }
-                    }
-                }
-                MenuRow(
-                    "外观设置",
-                    Icons.Filled.Contrast,
-                    MaterialTheme.colorScheme.tertiary,
-                    trailing = {
-                        Text(
-                            text = when (themeMode) {
-                                ThemeMode.SYSTEM -> "跟随系统"
-                                ThemeMode.LIGHT -> "浅色"
-                                ThemeMode.DARK -> "深色"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                ) { showThemeDialog = true }
-                if (isLoggedIn) {
-                    MenuRow("消息通知", Icons.Filled.Notifications, MaterialTheme.colorScheme.primary) { comingSoon("消息通知") }
-                }
-                MenuRow("帮助与支持", Icons.AutoMirrored.Filled.HelpOutline, MaterialTheme.colorScheme.tertiary) { comingSoon("帮助与支持") }
-            }
-
-            // ---- 退出登录（仅登录） ----
-            if (isLoggedIn) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "退出登录",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier
-                            .clickable { viewModel.logout() }
-                            .padding(vertical = 16.dp)
+                // ---- 头部用户卡 ----
+                if (!isLoggedIn) {
+                    GuestCard(onClick = onLogin)
+                } else {
+                    UserCard(
+                        uiState = uiState,
+                        onRetry = viewModel::load
                     )
                 }
+
+                // ---- 学习与记录（仅登录） ----
+                if (isLoggedIn) {
+                    MenuCard(title = "学习与记录") {
+                        MenuRow("发音弱项本", Icons.Filled.Mic, MaterialTheme.colorScheme.tertiary) { onOpenPronunciationNotebook() }
+                        MenuRow("学习路径", Icons.Filled.School, MaterialTheme.colorScheme.primary) { onOpenLearningPaths() }
+                        MenuRow("收听历史", Icons.Filled.History, MaterialTheme.colorScheme.secondary) { onOpenListeningHistory() }
+                        MenuRow("我的收藏", Icons.Filled.Bookmark, Color(0xFFB96F0F)) { onOpenFavorites() }
+                    }
+                }
+
+                // ---- 账户与系统设置 ----
+                MenuCard(title = "账户与系统设置") {
+                    if (isLoggedIn) {
+                        MenuRow("个人中心", Icons.Filled.Person, MaterialTheme.colorScheme.primary) { onOpenPersonalCenter() }
+                        MenuRow("我的订阅", Icons.Filled.CreditCard, MaterialTheme.colorScheme.secondary) { comingSoon("我的订阅") }
+                        if (uiState.profile?.role == "ADMIN") {
+                            MenuRow("控制台", Icons.Filled.Computer, MaterialTheme.colorScheme.error) { comingSoon("控制台") }
+                        }
+                    }
+                    MenuRow(
+                        "外观设置",
+                        Icons.Filled.Contrast,
+                        MaterialTheme.colorScheme.tertiary,
+                        trailing = {
+                            Text(
+                                text = when (themeMode) {
+                                    ThemeMode.SYSTEM -> "跟随系统"
+                                    ThemeMode.LIGHT -> "浅色"
+                                    ThemeMode.DARK -> "深色"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    ) { showThemeDialog = true }
+                    if (isLoggedIn) {
+                        MenuRow("消息通知", Icons.Filled.Notifications, MaterialTheme.colorScheme.primary) { comingSoon("消息通知") }
+                    }
+                    MenuRow("帮助与支持", Icons.AutoMirrored.Filled.HelpOutline, MaterialTheme.colorScheme.tertiary) { comingSoon("帮助与支持") }
+                }
+
+                // ---- 退出登录（仅登录） ----
+                if (isLoggedIn) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "退出登录",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier
+                                .clickable { viewModel.logout() }
+                                .padding(vertical = 16.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-            Spacer(modifier = Modifier.height(16.dp))
         }
 
         SnackbarHost(

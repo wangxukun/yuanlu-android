@@ -33,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,19 +111,25 @@ fun FavoritesRoute(
             Spacer(modifier = Modifier.width(48.dp))
         }
 
-        when {
-            state.isLoading -> LoadingBox()
-            state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::retry)
-            else -> FavoritesContent(
-                state = state,
-                onSelectTab = viewModel::selectTab,
-                onSearchQueryChange = viewModel::updateSearchQuery,
-                onOpenPodcast = onOpenPodcast,
-                onOpenEpisode = onOpenEpisode,
-                onRemovePodcast = viewModel::removePodcast,
-                onRemoveEpisode = viewModel::removeEpisode,
-                onGoDiscover = onGoDiscover
-            )
+        PullToRefreshBox(
+            isRefreshing = state.isRefreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            when {
+                state.isLoading -> LoadingBox()
+                state.error != null -> ErrorBox(message = state.error!!, onRetry = viewModel::retry)
+                else -> FavoritesContent(
+                    state = state,
+                    onSelectTab = viewModel::selectTab,
+                    onSearchQueryChange = viewModel::updateSearchQuery,
+                    onOpenPodcast = onOpenPodcast,
+                    onOpenEpisode = onOpenEpisode,
+                    onRemovePodcast = viewModel::removePodcast,
+                    onRemoveEpisode = viewModel::removeEpisode,
+                    onGoDiscover = onGoDiscover
+                )
+            }
         }
     }
 }

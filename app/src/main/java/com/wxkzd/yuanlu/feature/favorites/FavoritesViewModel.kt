@@ -19,6 +19,8 @@ enum class FavoritesTab { PODCASTS, EPISODES }
 
 data class FavoritesUiState(
     val isLoading: Boolean = true,
+    /** 下拉刷新中（静默重载，保留现有内容，仅顶部转圈） */
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val activeTab: FavoritesTab = FavoritesTab.PODCASTS,
     val searchQuery: String = "",
@@ -75,26 +77,38 @@ class FavoritesViewModel @Inject constructor(
 
     fun load(showLoading: Boolean = true) {
         if (showLoading) _uiState.update { it.copy(isLoading = true) }
+        viewModelScope.launch { fetchFavorites() }
+    }
+
+    /** 下拉刷新：静默重载（保留现有列表，仅顶部转圈），完成收起指示器 */
+    fun refresh() {
+        if (_uiState.value.isRefreshing) return
+        _uiState.update { it.copy(isRefreshing = true) }
         viewModelScope.launch {
-            when (val result = contentRepository.getFavorites()) {
-                is Result.Success -> {
-                    // 把服务端事实回填进全局中心：列表页的取消收藏依赖中心已知"已收藏"
-                    result.data.podcasts.forEach {
-                        favoriteCenter.seedIfAbsent(FavoriteCenter.Key(FavoriteCenter.Target.PODCAST, it.id), true)
-                    }
-                    result.data.episodes.forEach {
-                        favoriteCenter.seedIfAbsent(FavoriteCenter.Key(FavoriteCenter.Target.EPISODE, it.id), true)
-                    }
-                    _uiState.update {
-                        it.copy(isLoading = false, error = null, podcasts = result.data.podcasts, episodes = result.data.episodes)
-                    }
+            fetchFavorites()
+            _uiState.update { it.copy(isRefreshing = false) }
+        }
+    }
+
+    private suspend fun fetchFavorites() {
+        when (val result = contentRepository.getFavorites()) {
+            is Result.Success -> {
+                // 把服务端事实回填进全局中心：列表页的取消收藏依赖中心已知"已收藏"
+                result.data.podcasts.forEach {
+                    favoriteCenter.seedIfAbsent(FavoriteCenter.Key(FavoriteCenter.Target.PODCAST, it.id), true)
                 }
-                is Result.Error -> _uiState.update {
-                    it.copy(isLoading = false, error = result.message)
+                result.data.episodes.forEach {
+                    favoriteCenter.seedIfAbsent(FavoriteCenter.Key(FavoriteCenter.Target.EPISODE, it.id), true)
                 }
-                Result.NetworkError -> _uiState.update {
-                    it.copy(isLoading = false, error = "网络连接失败")
+                _uiState.update {
+                    it.copy(isLoading = false, error = null, podcasts = result.data.podcasts, episodes = result.data.episodes)
                 }
+            }
+            is Result.Error -> _uiState.update {
+                it.copy(isLoading = false, error = result.message)
+            }
+            Result.NetworkError -> _uiState.update {
+                it.copy(isLoading = false, error = "网络连接失败")
             }
         }
     }

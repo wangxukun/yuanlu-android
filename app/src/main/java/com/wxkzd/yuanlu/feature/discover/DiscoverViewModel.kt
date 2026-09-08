@@ -25,6 +25,8 @@ data class ChannelEntry(
 
 data class DiscoverUiState(
     val isLoading: Boolean = true,
+    /** 下拉刷新中（静默重载，保留现有内容，仅顶部转圈） */
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val query: String = "",
     /** null = 未处于搜索态；空列表 = 搜索无结果 */
@@ -65,8 +67,15 @@ class DiscoverViewModel @Inject constructor(
         }
     }
 
-    fun load() {
-        _uiState.update { it.copy(isLoading = true, error = null) }
+    /**
+     * @param silent true = 下拉刷新（保留现有内容仅转圈）；false = 首次/重试（回到骨架屏）
+     */
+    fun load(silent: Boolean = false) {
+        if (silent && _uiState.value.isRefreshing) return
+        _uiState.update {
+            if (silent) it.copy(isRefreshing = true, error = null)
+            else it.copy(isLoading = true, error = null)
+        }
         viewModelScope.launch {
             val tagsResult = contentRepository.getTags()
             val podcastsResult = contentRepository.getPodcasts()
@@ -78,6 +87,7 @@ class DiscoverViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isLoading = false,
+                            isRefreshing = false,
                             podcasts = podcasts,
                             tags = tags,
                             trending = podcasts.sortedByDescending { p -> p.totalPlays }.take(TRENDING_LIMIT),
@@ -95,14 +105,17 @@ class DiscoverViewModel @Inject constructor(
                     }
                 }
                 is Result.Error -> _uiState.update {
-                    it.copy(isLoading = false, error = podcastsResult.message)
+                    it.copy(isLoading = false, isRefreshing = false, error = podcastsResult.message)
                 }
                 Result.NetworkError -> _uiState.update {
-                    it.copy(isLoading = false, error = "网络连接失败")
+                    it.copy(isLoading = false, isRefreshing = false, error = "网络连接失败")
                 }
             }
         }
     }
+
+    /** 下拉刷新入口 */
+    fun refresh() = load(silent = true)
 
     fun onQueryChange(query: String) {
         _uiState.update { it.copy(query = query) }
