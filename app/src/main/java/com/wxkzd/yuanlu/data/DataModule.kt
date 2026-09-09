@@ -1,5 +1,6 @@
 package com.wxkzd.yuanlu.data
 
+import com.wxkzd.yuanlu.core.auth.TokenSource
 import com.wxkzd.yuanlu.core.auth.TokenStore
 import com.wxkzd.yuanlu.core.media.PlayerController
 import com.wxkzd.yuanlu.core.media.ProgressReporter
@@ -45,6 +46,13 @@ object DataModule {
         tokenStore: TokenStore
     ): AuthRepository {
         return AuthRepositoryImpl(api, tokenStore)
+    }
+
+    /** 页面 ViewModel 通过 TokenSource 接口订阅全局登录态（生产实现即 TokenStore） */
+    @Provides
+    @Singleton
+    fun provideTokenSource(tokenStore: TokenStore): TokenSource {
+        return tokenStore
     }
 
     @Provides

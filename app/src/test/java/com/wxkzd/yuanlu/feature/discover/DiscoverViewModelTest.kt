@@ -1,5 +1,6 @@
 package com.wxkzd.yuanlu.feature.discover
 
+import com.wxkzd.yuanlu.FakeTokenSource
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.ChannelData
 import com.wxkzd.yuanlu.domain.model.Comment
@@ -61,7 +62,7 @@ class DiscoverViewModelTest {
             podcast("c", plays = 300, createAt = "2026-07-01T00:00:00.000Z", platform = "Apple Podcasts"),
             podcast("d", plays = 50, editorPick = true, platform = null)
         )
-        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = podcasts))
+        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = podcasts), FakeTokenSource("jwt-u1"))
         runCurrent()
         // debounce 收集器不触发搜索（query 为空）
         val state = viewModel.uiState.value
@@ -83,7 +84,7 @@ class DiscoverViewModelTest {
                 createAt = "2026-08-%02d".format(i)
             )
         }
-        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = podcasts))
+        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = podcasts), FakeTokenSource("jwt-u1"))
         runCurrent()
 
         assertEquals(DiscoverViewModel.TRENDING_LIMIT, viewModel.uiState.value.trending.size)
@@ -94,7 +95,7 @@ class DiscoverViewModelTest {
 
     @Test
     fun `empty sections collapse without errors`() = runTest(dispatcher) {
-        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = emptyList()))
+        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = emptyList()), FakeTokenSource("jwt-u1"))
         runCurrent()
 
         val state = viewModel.uiState.value
@@ -105,11 +106,30 @@ class DiscoverViewModelTest {
     }
 
     @Test
+    fun `account switch reloads content instead of stale cache`() = runTest(dispatcher) {
+        val repository = FakeContentRepository(podcasts = listOf(podcast("a", plays = 10)))
+        val tokens = FakeTokenSource("jwt-u1")
+        val viewModel = DiscoverViewModel(repository, tokens)
+        runCurrent()
+        assertEquals(listOf("a"), viewModel.uiState.value.podcasts.map { it.podcastid })
+
+        // 换号登录：清空旧状态后立即整页重拉，展示新一轮数据而非上一账号的缓存
+        repository.podcasts = listOf(podcast("b", plays = 20), podcast("c", plays = 30))
+        tokens.logout()
+        runCurrent()
+        tokens.login("jwt-u2")
+        runCurrent()
+
+        assertEquals(listOf("c", "b"), viewModel.uiState.value.trending.map { it.podcastid })
+        assertEquals(listOf("b", "c"), viewModel.uiState.value.podcasts.map { it.podcastid })
+    }
+
+    @Test
     fun `selectTag filters grid content`() = runTest(dispatcher) {
         val tag = Tag(1, "Business")
         val withTag = Podcast(podcastid = "a", title = "A", tags = listOf(tag))
         val without = Podcast(podcastid = "b", title = "B")
-        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = listOf(withTag, without)))
+        val viewModel = DiscoverViewModel(FakeContentRepository(podcasts = listOf(withTag, without)), FakeTokenSource("jwt-u1"))
         runCurrent()
 
         viewModel.selectTag(tag)
@@ -123,7 +143,7 @@ class DiscoverViewModelTest {
 }
 
 private class FakeContentRepository(
-    private val podcasts: List<Podcast> = emptyList()
+    var podcasts: List<Podcast> = emptyList()
 ) : ContentRepository {
 
     override suspend fun getLatestEpisodes(page: Int, pageSize: Int): Result<List<Episode>> =

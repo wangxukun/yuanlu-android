@@ -22,10 +22,10 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 @Singleton
 class TokenStore @Inject constructor(
     @ApplicationContext private val context: Context
-) {
+) : TokenSource {
     private val TOKEN_KEY = stringPreferencesKey("jwt_token")
 
-    val tokenFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+    override val tokenFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[TOKEN_KEY]
     }
 

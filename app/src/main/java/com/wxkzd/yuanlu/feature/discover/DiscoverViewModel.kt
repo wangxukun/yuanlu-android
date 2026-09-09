@@ -2,6 +2,9 @@ package com.wxkzd.yuanlu.feature.discover
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wxkzd.yuanlu.core.auth.AuthSessionEvent
+import com.wxkzd.yuanlu.core.auth.TokenSource
+import com.wxkzd.yuanlu.core.auth.toAuthSessionEvents
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.Podcast
 import com.wxkzd.yuanlu.domain.model.Tag
@@ -45,7 +48,8 @@ data class DiscoverUiState(
 @OptIn(FlowPreview::class)
 @HiltViewModel
 class DiscoverViewModel @Inject constructor(
-    private val contentRepository: ContentRepository
+    private val contentRepository: ContentRepository,
+    tokenSource: TokenSource
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DiscoverUiState())
@@ -54,8 +58,23 @@ class DiscoverViewModel @Inject constructor(
     private val queryInput = MutableStateFlow("")
     private var searchJob: Job? = null
 
+    /** 在途列表加载（会话切换时取消，防止旧响应回写新状态） */
+    private var loadJob: Job? = null
+
     init {
-        load()
+        // 订阅全局会话事件：VM 生命周期与 Main 导航项一致，账号切换后不会重建，
+        // 必须由会话流驱动数据轮换。发现页为公开内容：
+        // - 登录/换号 → 清空后整页重拉（新账号视角的数据）；
+        // - 登出 → 同样清空旧缓存，但立即以游客态重拉，保住「游客可浏览」体验。
+        viewModelScope.launch {
+            tokenSource.tokenFlow.toAuthSessionEvents().collect {
+                loadJob?.cancel()
+                searchJob?.cancel()
+                queryInput.value = ""
+                _uiState.value = DiscoverUiState()
+                load()
+            }
+        }
         viewModelScope.launch {
             queryInput.debounce(400L).collect { query ->
                 if (query.isBlank()) {
@@ -72,11 +91,12 @@ class DiscoverViewModel @Inject constructor(
      */
     fun load(silent: Boolean = false) {
         if (silent && _uiState.value.isRefreshing) return
+        loadJob?.cancel()
         _uiState.update {
             if (silent) it.copy(isRefreshing = true, error = null)
             else it.copy(isLoading = true, error = null)
         }
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             val tagsResult = contentRepository.getTags()
             val podcastsResult = contentRepository.getPodcasts()
 

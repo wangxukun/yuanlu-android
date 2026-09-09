@@ -2,11 +2,15 @@ package com.wxkzd.yuanlu.feature.vocabulary
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wxkzd.yuanlu.core.auth.AuthSessionEvent
+import com.wxkzd.yuanlu.core.auth.TokenSource
+import com.wxkzd.yuanlu.core.auth.toAuthSessionEvents
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.VocabularyItem
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,7 +67,8 @@ data class VocabularyUiState(
 
 @HiltViewModel
 class VocabularyViewModel @Inject constructor(
-    private val contentRepository: ContentRepository
+    private val contentRepository: ContentRepository,
+    tokenSource: TokenSource
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VocabularyUiState())
@@ -75,8 +80,25 @@ class VocabularyViewModel @Inject constructor(
         _toast.value = null
     }
 
+    /** 在途列表加载（会话切换时取消，防止旧账号响应回写新状态） */
+    private var loadJob: Job? = null
+
     init {
-        load()
+        // 本 VM 由 AppNavHost 以 Activity 作用域创建（游客期已实例化），
+        // 不能在 init 里一次性 load()——无 token 会 401 并把「请先登录」
+        // 错误态缓存到登录之后。改为订阅全局会话事件：
+        // 冷启动已登录 / 登录成功 → 自动整页拉取；登出 → 清空上一账号数据。
+        viewModelScope.launch {
+            tokenSource.tokenFlow.toAuthSessionEvents().collect { event ->
+                when (event) {
+                    AuthSessionEvent.SessionCleared -> {
+                        loadJob?.cancel()
+                        _uiState.value = VocabularyUiState()
+                    }
+                    is AuthSessionEvent.SessionStarted -> load()
+                }
+            }
+        }
     }
 
     /**
@@ -84,11 +106,12 @@ class VocabularyViewModel @Inject constructor(
      */
     fun load(silent: Boolean = false) {
         if (silent && _uiState.value.isRefreshing) return
+        loadJob?.cancel()
         _uiState.update {
             if (silent) it.copy(isRefreshing = true, error = null)
             else it.copy(isLoading = true, error = null)
         }
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             when (val result = contentRepository.getAllVocabulary()) {
                 is Result.Success -> _uiState.update {
                     it.copy(isLoading = false, isRefreshing = false, vocabulary = result.data)
