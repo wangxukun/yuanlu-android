@@ -2,6 +2,9 @@ package com.wxkzd.yuanlu.feature.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wxkzd.yuanlu.core.auth.AuthSessionEvent
+import com.wxkzd.yuanlu.core.auth.TokenSource
+import com.wxkzd.yuanlu.core.auth.toAuthSessionEvents
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.Episode
 import com.wxkzd.yuanlu.domain.model.HistoryItem
@@ -10,6 +13,7 @@ import com.wxkzd.yuanlu.domain.model.VocabularyItem
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -48,10 +52,13 @@ data class HomeUiState(
     val isRefreshing: Boolean = false,
     val error: String? = null,
     // ---- 头部问候区 ----
+    /** 完整问候语：时间前缀 + 昵称（如「晚上好，远路漫漫。」） */
     val greeting: String = "你好",
     val displayName: String = "朋友",
     val bio: String = DEFAULT_BIO,
     val streakDays: Int = 0,
+    /** 今日打卡状态：达标「今日打卡完成」/ 未达标「今日打卡还差 {X} 分钟」 */
+    val checkInStatus: String = "",
     // ---- 核心卡片 ----
     val latestHistory: HistoryItem? = null,
     val mileage: WeeklyMileage = WeeklyMileage(),
@@ -80,17 +87,30 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val contentRepository: ContentRepository
+    private val contentRepository: ContentRepository,
+    tokenSource: TokenSource
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    /** 一次聚合刷新是否在途（防重入；与 UI 的 Loading/Refreshing 展示解耦） */
-    private var refreshing = false
+    /** 在途聚合刷新（isActive 即为防重入标记；会话切换时取消，防止旧账号响应回写新状态） */
+    private var refreshJob: Job? = null
 
     init {
-        refresh()
+        // 订阅全局会话事件：冷启动已登录 / 登录成功 / 换号 → 自动整页聚合刷新；
+        // 登出 → 清空上一账号的资料/里程/历史缓存，绝不在下次登录时展示旧数据。
+        viewModelScope.launch {
+            tokenSource.tokenFlow.toAuthSessionEvents().collect { event ->
+                when (event) {
+                    AuthSessionEvent.SessionCleared -> {
+                        refreshJob?.cancel()
+                        _uiState.value = HomeUiState()
+                    }
+                    is AuthSessionEvent.SessionStarted -> refresh()
+                }
+            }
+        }
     }
 
     /**
@@ -98,10 +118,8 @@ class HomeViewModel @Inject constructor(
      *               false = 首次/重试（回到骨架屏 Loading）
      */
     fun refresh(silent: Boolean = false) {
-        if (refreshing) return
-        refreshing = true
-        viewModelScope.launch {
-            try {
+        if (refreshJob?.isActive == true) return
+        refreshJob = viewModelScope.launch {
             if (silent) {
                 _uiState.update { it.copy(isRefreshing = true) }
             } else {
@@ -164,9 +182,6 @@ class HomeViewModel @Inject constructor(
                 }
             } else {
                 _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = null) }
-            }
-            } finally {
-                refreshing = false
             }
         }
     }
@@ -245,6 +260,16 @@ class HomeViewModel @Inject constructor(
             DAY_LABELS.mapIndexed { i, label -> JourneyDay(label, 0, i == todayIndex) }
         }
 
+        // ---- 今日打卡：今日已学分钟 vs 每日目标（对齐 Web 首页打卡徽章） ----
+        val todayMinutes = weekNow?.getOrNull(todayIndex)?.minutes ?: 0
+        val dailyGoalMins =
+            (profile?.dailyStudyGoalMins ?: DEFAULT_DAILY_GOAL_MINS).coerceAtLeast(0)
+        val checkInStatus = if (todayMinutes >= dailyGoalMins) {
+            "今日打卡完成"
+        } else {
+            "今日打卡还差 ${dailyGoalMins - todayMinutes} 分钟"
+        }
+
         // ---- 继续收听：第 1 条给顶部续播卡，其余给横向列表 ----
         val historyItems = history?.items.orEmpty()
         val episodesSorted = episodes.orEmpty()
@@ -261,10 +286,11 @@ class HomeViewModel @Inject constructor(
         }
 
         return previous.copy(
-            greeting = currentGreeting(),
+            greeting = "${currentGreeting()}，$displayName。",
             displayName = displayName,
             bio = bio,
             streakDays = streakDays ?: 0,
+            checkInStatus = checkInStatus,
             latestHistory = historyItems.firstOrNull(),
             mileage = mileage,
             journeyDays = journeyDays,
@@ -331,6 +357,9 @@ class HomeViewModel @Inject constructor(
         /** Web getUserHomeStats 的兜底默认值 */
         const val DEFAULT_LISTENING_GOAL_HOURS = 2
         const val DEFAULT_WORDS_GOAL = 50
+
+        /** 每日学习目标兜底（与个人中心编辑资料表单同口径） */
+        const val DEFAULT_DAILY_GOAL_MINS = 20
 
         val DAY_LABELS = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 

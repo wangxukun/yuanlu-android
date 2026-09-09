@@ -137,8 +137,8 @@ private fun HomeContent(
         // ---- 一、头部状态区：问候 + 签名 + 连续打卡 ----
         HomeHeader(
             greeting = state.greeting,
-            displayName = state.displayName,
             bio = state.bio,
+            checkInStatus = state.checkInStatus,
             streakDays = state.streakDays
         )
 
@@ -201,24 +201,32 @@ private fun HomeSectionSpacer(modifier: Modifier = Modifier) {
 // 一、头部状态区
 // ================================================================
 
+/**
+ * 头部状态区（对齐 Web 首页 Header）：左右 Flex 两端分布 + 垂直居中。
+ * 左侧问候语（大字加粗）+ 个性签名（小字浅色）；右侧连胜徽章（双行胶囊）。
+ * 左列 weight(1f) + 文本省略/换行兜底，长昵称小屏下不会挤压右侧徽章。
+ */
 @Composable
 private fun HomeHeader(
     greeting: String,
-    displayName: String,
     bio: String,
+    checkInStatus: String,
     streakDays: Int
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 20.dp),
-        verticalAlignment = Alignment.Bottom
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "$greeting，$displayName。",
+                text = greeting,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -229,27 +237,42 @@ private fun HomeHeader(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        if (streakDays > 0) {
-            Spacer(modifier = Modifier.width(12.dp))
-            StreakPill(days = streakDays)
-        }
+        Spacer(modifier = Modifier.width(12.dp))
+        StreakBadge(status = checkInStatus, days = streakDays)
     }
 }
 
-/** 连续打卡胶囊：🔥 + 连续 x 天（accent-100 底 / accent-700 字） */
+/**
+ * 连胜徽章（对齐 Web 首页打卡胶囊）：accent-100 暖橘底胶囊，
+ * 内部上下两行居中——上行今日打卡进度，下行 🔥 连续天数，accent-700 强调色。
+ */
 @Composable
-private fun StreakPill(days: Int, modifier: Modifier = Modifier) {
+private fun StreakBadge(status: String, days: Int, modifier: Modifier = Modifier) {
     val dark = isDarkTheme()
-    Text(
-        text = "🔥 连续 $days 天",
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = if (dark) Accent300 else Accent700,
+    Column(
         modifier = modifier
-            .clip(RoundedCornerShape(50))
+            .clip(RoundedCornerShape(16.dp))
             .background(if (dark) Accent900Scrim else Accent100)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = status,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = if (dark) Accent300 else Accent700,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "🔥 连续 $days 天",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (dark) Accent300 else Accent700,
+            maxLines = 1
+        )
+    }
 }
 
 // ================================================================

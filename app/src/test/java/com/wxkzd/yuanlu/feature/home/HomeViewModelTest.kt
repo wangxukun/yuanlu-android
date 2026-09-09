@@ -1,5 +1,6 @@
 package com.wxkzd.yuanlu.feature.home
 
+import com.wxkzd.yuanlu.FakeTokenSource
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ChannelData
@@ -140,7 +141,8 @@ class HomeViewModelTest {
                     VocabularyItem(vocabularyid = 1, word = "road", addedDate = nowIsoUtc()),
                     VocabularyItem(vocabularyid = 2, word = "far", addedDate = "2020-01-01T00:00:00")
                 )
-            )
+            ),
+            tokenSource = FakeTokenSource("jwt-u1")
         )
         runCurrent()
 
@@ -186,7 +188,8 @@ class HomeViewModelTest {
             ),
             contentRepository = FakeContentRepository(
                 episodes = listOf(episode("e1", "A1"), episode("e2", "B1"), episode("e3", "A2"))
-            )
+            ),
+            tokenSource = FakeTokenSource("jwt-u1")
         )
         runCurrent()
 
@@ -199,13 +202,59 @@ class HomeViewModelTest {
     fun `journey strip keeps weekday labels when weekly activity missing`() = runTest(dispatcher) {
         val viewModel = HomeViewModel(
             authRepository = FakeAuthRepository(weekNow = emptyList()),
-            contentRepository = FakeContentRepository(episodes = emptyList())
+            contentRepository = FakeContentRepository(episodes = emptyList()),
+            tokenSource = FakeTokenSource("jwt-u1")
         )
         runCurrent()
 
         val days = viewModel.uiState.value.journeyDays
         assertEquals(HomeViewModel.DAY_LABELS, days.map { it.label })
         assertTrue(days.all { it.minutes == 0 })
+        // 周活动缺失时今日按 0 分钟计，未达标状态照常输出
+        assertEquals("今日打卡还差 ${HomeViewModel.DEFAULT_DAILY_GOAL_MINS} 分钟", viewModel.uiState.value.checkInStatus)
+    }
+
+    @Test
+    fun `greeting joins time prefix with nickname`() = runTest(dispatcher) {
+        val viewModel = HomeViewModel(
+            authRepository = FakeAuthRepository(profile = UserProfile(userid = "u1", nickname = "远路漫漫")),
+            contentRepository = FakeContentRepository(episodes = emptyList()),
+            tokenSource = FakeTokenSource("jwt-u1")
+        )
+        runCurrent()
+
+        val greeting = viewModel.uiState.value.greeting
+        assertTrue(greeting in setOf("早上好，远路漫漫。", "下午好，远路漫漫。", "晚上好，远路漫漫。"))
+    }
+
+    @Test
+    fun `check-in completes when today minutes reach daily goal`() = runTest(dispatcher) {
+        val viewModel = HomeViewModel(
+            authRepository = FakeAuthRepository(
+                profile = UserProfile(userid = "u1", dailyStudyGoalMins = 30),
+                weekNow = fullWeek(30, 30, 30, 30, 30, 30, 30)
+            ),
+            contentRepository = FakeContentRepository(episodes = emptyList()),
+            tokenSource = FakeTokenSource("jwt-u1")
+        )
+        runCurrent()
+
+        assertEquals("今日打卡完成", viewModel.uiState.value.checkInStatus)
+    }
+
+    @Test
+    fun `check-in shows remaining minutes when goal unmet`() = runTest(dispatcher) {
+        val viewModel = HomeViewModel(
+            authRepository = FakeAuthRepository(
+                profile = UserProfile(userid = "u1", dailyStudyGoalMins = 45),
+                weekNow = fullWeek(20, 20, 20, 20, 20, 20, 20)
+            ),
+            contentRepository = FakeContentRepository(episodes = emptyList()),
+            tokenSource = FakeTokenSource("jwt-u1")
+        )
+        runCurrent()
+
+        assertEquals("今日打卡还差 25 分钟", viewModel.uiState.value.checkInStatus)
     }
 
     @Test
@@ -218,7 +267,8 @@ class HomeViewModelTest {
                 weekNow = fullWeek(0, 0, 0, 0, 0, 0, 0),
                 weekLast = fullWeek(0, 0, 0, 0, 0, 0, 0)
             ),
-            contentRepository = FakeContentRepository(episodes = listOf(episode("e1")))
+            contentRepository = FakeContentRepository(episodes = listOf(episode("e1"))),
+            tokenSource = FakeTokenSource("jwt-u1")
         )
         runCurrent()
         val partialState = partial.uiState.value
@@ -229,7 +279,8 @@ class HomeViewModelTest {
         // 全部失败：网络错误 → 整页错误态
         val all = HomeViewModel(
             authRepository = FakeAuthRepository(allFailure = Result.NetworkError),
-            contentRepository = FakeContentRepository(failure = Result.NetworkError)
+            contentRepository = FakeContentRepository(failure = Result.NetworkError),
+            tokenSource = FakeTokenSource("jwt-u1")
         )
         runCurrent()
         val allState = all.uiState.value
@@ -242,7 +293,8 @@ class HomeViewModelTest {
         val repository = FakeContentRepository(episodes = listOf(episode("e1")))
         val viewModel = HomeViewModel(
             authRepository = FakeAuthRepository(),
-            contentRepository = repository
+            contentRepository = repository,
+            tokenSource = FakeTokenSource("jwt-u1")
         )
         runCurrent()
         assertEquals(1, viewModel.uiState.value.latestEpisodes.size)
@@ -253,10 +305,36 @@ class HomeViewModelTest {
         assertFalse(viewModel.uiState.value.isRefreshing)
         assertEquals(1, viewModel.uiState.value.latestEpisodes.size)
     }
+
+    @Test
+    fun `logout clears cached profile and next login reloads fresh account`() = runTest(dispatcher) {
+        val auth = FakeAuthRepository(profile = UserProfile(userid = "u1", nickname = "账号一"))
+        val tokens = FakeTokenSource("jwt-u1")
+        val viewModel = HomeViewModel(
+            authRepository = auth,
+            contentRepository = FakeContentRepository(),
+            tokenSource = tokens
+        )
+        runCurrent()
+        assertEquals("账号一", viewModel.uiState.value.displayName)
+
+        // 登出：资料/里程/历史等用户缓存全部清空，回到默认态
+        tokens.logout()
+        runCurrent()
+        assertEquals("朋友", viewModel.uiState.value.displayName)
+        assertNull(viewModel.uiState.value.latestHistory)
+        assertTrue(viewModel.uiState.value.continueListening.isEmpty())
+
+        // 换号登录：自动整页重拉，展示新账号资料而非上一账号残留
+        auth.profile = UserProfile(userid = "u2", nickname = "账号二")
+        tokens.login("jwt-u2")
+        runCurrent()
+        assertEquals("账号二", viewModel.uiState.value.displayName)
+    }
 }
 
 private class FakeAuthRepository(
-    private val profile: UserProfile? = null,
+    var profile: UserProfile? = null,
     private val profileFailure: Result<UserProfile>? = null,
     private val stats: ProfileStats? = null,
     private val weekNow: List<WeeklyActivityItem> = emptyList(),
