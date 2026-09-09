@@ -182,7 +182,13 @@ class WeaknessPracticeViewModel @Inject constructor(
             viewModelScope.launch {
                 when (val r = contentRepository.lookupWord(cleanWord(word))) {
                     is Result.Success -> r.data.phoneticsUs?.let { ipa ->
-                        updateCard { it.copy(ipaCache = it.ipaCache + (word.lowercase() to ipa)) }
+                        // 词典音标自带斜杠包裹（/sʌm/），入缓存前剥离（与 SpeechEvalViewModel 同口径）
+                        updateCard {
+                            it.copy(
+                                ipaCache = it.ipaCache +
+                                    (word.lowercase() to PronunciationUtils.stripIpaSlashes(ipa))
+                            )
+                        }
                     }
                     else -> Unit
                 }

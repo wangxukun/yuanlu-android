@@ -37,4 +37,22 @@ object PronunciationUtils {
     /** 薄弱音素雷达数据：最弱前 6 项（Web stats.slice(0,6)），标签包 /音素/ */
     fun phonemeRadarPoints(stats: List<com.wxkzd.yuanlu.domain.model.PhonemeStat>, limit: Int = 6) =
         stats.take(limit).map { "/${it.phoneme}/" to it.avgScore.toFloat() }
+
+    /** 音标弱读变体提示段（定冠词等）："/ðə/ (before vowels: /ði/)" 中的括号标注 */
+    private val beforeVowelsNote = Regex("\\s*\\(before vowels:[^)]*\\)", RegexOption.IGNORE_CASE)
+
+    private val whitespace = Regex("\\s+")
+
+    /**
+     * 清洗词典音标用于音标文本模式逐词拼接展示：
+     * 1) 移除定冠词弱读变体提示 "(before vowels: /ði/)"（连同前导空白，避免留尾空格）；
+     * 2) 移除所有斜杠分隔符（含复合标注内残留的孤立斜杠）；
+     * 3) 压缩连续空格并 trim。
+     * 例："/ðə/ (before vowels: /ði/)" → "ðə"；"/sʌm/" → "sʌm"；"/gəʊ / " → "gəʊ"。
+     */
+    fun stripIpaSlashes(ipa: String): String = ipa
+        .replace(beforeVowelsNote, "")
+        .replace("/", "")
+        .replace(whitespace, " ")
+        .trim()
 }

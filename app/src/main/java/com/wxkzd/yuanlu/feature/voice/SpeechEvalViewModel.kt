@@ -17,6 +17,7 @@ import com.wxkzd.yuanlu.domain.model.SpeechPracticeRecord
 import com.wxkzd.yuanlu.domain.model.Subtitle
 import com.wxkzd.yuanlu.domain.repository.ContentRepository
 import com.wxkzd.yuanlu.domain.repository.SpeechRepository
+import com.wxkzd.yuanlu.feature.pronunciation.PronunciationUtils
 import com.wxkzd.yuanlu.feature.vocabulary.WordLookupController
 import com.wxkzd.yuanlu.feature.vocabulary.WordSheetState
 import com.wxkzd.yuanlu.theme.ThemeMode
@@ -361,7 +362,13 @@ class SpeechEvalViewModel @Inject constructor(
             viewModelScope.launch {
                 when (val r = contentRepository.lookupWord(cleanWord(word))) {
                     is Result.Success -> r.data.phoneticsUs?.let { ipa ->
-                        _uiState.update { it.copy(ipaCache = it.ipaCache + (word.lowercase() to ipa)) }
+                        // 词典音标自带斜杠包裹（/sʌm/），入缓存前剥离，句内按空格拼接展示
+                        _uiState.update {
+                            it.copy(
+                                ipaCache = it.ipaCache +
+                                    (word.lowercase() to PronunciationUtils.stripIpaSlashes(ipa))
+                            )
+                        }
                     }
                     else -> Unit
                 }

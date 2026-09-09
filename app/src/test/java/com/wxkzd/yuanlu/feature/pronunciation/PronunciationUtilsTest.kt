@@ -84,4 +84,31 @@ class PronunciationUtilsTest {
         // 不足 3 项时由 UI 层渲染空态
         assertEquals(2, PronunciationUtils.phonemeRadarPoints(stats.take(2)).size)
     }
+
+    // ---------- stripIpaSlashes（音标文本模式：剥离词典音标斜杠 + 过滤弱读变体提示） ----------
+
+    @Test
+    fun `strips slashes wrapping a single word phonetic`() {
+        assertEquals("sʌm", PronunciationUtils.stripIpaSlashes("/sʌm/"))
+        assertEquals("'pi:pəl", PronunciationUtils.stripIpaSlashes("/'pi:pəl/"))
+    }
+
+    @Test
+    fun `drops before-vowels annotation together with its slashes`() {
+        // 提示段连同前导空白与内部斜杠整体移除，只留主干音标
+        assertEquals("ðə", PronunciationUtils.stripIpaSlashes("/ðə/ (before vowels: /ði/)"))
+        assertEquals("ðə", PronunciationUtils.stripIpaSlashes("/ðə/  (before vowels: /ði/) "))
+        assertEquals("ði", PronunciationUtils.stripIpaSlashes("/ði/(before vowels: /ðiː/)"))
+    }
+
+    @Test
+    fun `annotation-only phonetic collapses to empty`() {
+        assertEquals("", PronunciationUtils.stripIpaSlashes("(before vowels: /ði/)"))
+    }
+
+    @Test
+    fun `keeps slash-free phonetic unchanged and trims blanks`() {
+        assertEquals("laɪk", PronunciationUtils.stripIpaSlashes("laɪk"))
+        assertEquals("gəʊ", PronunciationUtils.stripIpaSlashes(" /gəʊ/ "))
+    }
 }
