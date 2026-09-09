@@ -2,10 +2,14 @@ package com.wxkzd.yuanlu.data.remote
 
 import com.wxkzd.yuanlu.core.network.ApiResponse
 import com.wxkzd.yuanlu.data.remote.dto.AchievementItemDto
+import com.wxkzd.yuanlu.data.remote.dto.AuthActionResponse
+import com.wxkzd.yuanlu.data.remote.dto.EmailCodeSendRequest
+import com.wxkzd.yuanlu.data.remote.dto.EmailCodeVerifyRequest
 import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
 import com.wxkzd.yuanlu.data.remote.dto.LoginResponseData
 import com.wxkzd.yuanlu.data.remote.dto.ProfileStatsDto
 import com.wxkzd.yuanlu.data.remote.dto.ProfileUpdateResponseDto
+import com.wxkzd.yuanlu.data.remote.dto.SignUpRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendResponse
 import com.wxkzd.yuanlu.data.remote.dto.UserProfileDto
@@ -27,6 +31,20 @@ interface AuthApi {
     /** 业务失败也返回 HTTP 200（requireCaptcha 标识滑块风控） */
     @POST("api/auth/sms/send")
     suspend fun sendSmsCode(@Body request: SmsSendRequest): SmsSendResponse
+
+    // ---------- 邮箱注册（对齐 Web 注册对话框三步：发码 → 验码 → 创建账号） ----------
+
+    /** 裸响应 { success, message }；发送失败随 5xx 由 errorMessage() 解析 */
+    @POST("api/auth/send-verification-code")
+    suspend fun sendEmailVerificationCode(@Body request: EmailCodeSendRequest): AuthActionResponse
+
+    /** 裸响应 { success, message }；验证码错误/过期随 4xx 返回 */
+    @POST("api/auth/verify-code")
+    suspend fun verifyEmailCode(@Body request: EmailCodeVerifyRequest): AuthActionResponse
+
+    /** 裸响应 { success, message }；邮箱已注册随 400 返回 */
+    @POST("api/auth/sign-up")
+    suspend fun signUp(@Body request: SignUpRequest): AuthActionResponse
 
     /** 会话态接口，Bearer 由 AuthInterceptor 注入；返回裸对象 */
     @GET("api/user/profile")

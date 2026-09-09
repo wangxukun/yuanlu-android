@@ -3,7 +3,10 @@ package com.wxkzd.yuanlu.data.repository
 import com.wxkzd.yuanlu.core.auth.TokenStore
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.AuthApi
+import com.wxkzd.yuanlu.data.remote.dto.EmailCodeSendRequest
+import com.wxkzd.yuanlu.data.remote.dto.EmailCodeVerifyRequest
 import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
+import com.wxkzd.yuanlu.data.remote.dto.SignUpRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendRequest
 import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
@@ -81,10 +84,52 @@ class AuthRepositoryImpl @Inject constructor(
         tokenStore.clear()
     }
 
+    override suspend fun sendEmailVerificationCode(email: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.sendEmailVerificationCode(EmailCodeSendRequest(email))
+                if (response.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(400, response.message ?: "验证码发送失败，请稍后重试")
+                }
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "验证码发送失败")
+            }
+        }
+    }
+
+    override suspend fun signUp(email: String, code: String, password: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val verify = api.verifyEmailCode(EmailCodeVerifyRequest(email, code))
+                if (!verify.success) {
+                    return@withContext Result.Error(400, verify.message ?: "验证码错误")
+                }
+                val create = api.signUp(SignUpRequest(email, password))
+                if (create.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(400, create.message ?: "注册失败，请稍后重试")
+                }
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "注册失败")
+            }
+        }
+    }
+
     override suspend fun sendSmsCode(phone: String): Result<SmsSendStatus> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = api.sendSmsCode(SmsSendRequest(phone = phone))
+                val response = api.sendSmsCode(SmsSendRequest(phone = phone, scene = "LOGIN"))
                 if (response.success) {
                     Result.Success(SmsSendStatus(requireCaptcha = false))
                 } else {

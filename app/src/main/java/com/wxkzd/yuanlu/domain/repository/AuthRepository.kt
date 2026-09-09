@@ -19,6 +19,15 @@ interface AuthRepository {
     /** 发送登录短信验证码（60s 限频由后端控制） */
     suspend fun sendSmsCode(phone: String): Result<SmsSendStatus>
 
+    /** 发送邮箱注册验证码（对齐 Web /api/auth/send-verification-code，5 分钟有效） */
+    suspend fun sendEmailVerificationCode(email: String): Result<Unit>
+
+    /**
+     * 邮箱注册（对齐 Web 注册对话框）：先 verify-code 校验邮箱验证码，
+     * 通过后 sign-up 创建账号；邮箱已注册/验证码错误由后端文案透出。
+     */
+    suspend fun signUp(email: String, code: String, password: String): Result<Unit>
+
     /** 当前登录用户资料 */
     suspend fun getProfile(): Result<UserProfile>
 

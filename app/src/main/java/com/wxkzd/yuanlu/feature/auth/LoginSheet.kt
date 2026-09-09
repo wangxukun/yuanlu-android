@@ -61,6 +61,9 @@ fun LoginSheet(
     var isPhoneMode by rememberSaveable { mutableStateOf(true) }
     var account by rememberSaveable { mutableStateOf("") }
     var credential by rememberSaveable { mutableStateOf("") }
+    // 邮箱注册表单：密码 + 确认密码（验证码复用 credential，切换模式时一并清空）
+    var registerPassword by rememberSaveable { mutableStateOf("") }
+    var registerConfirm by rememberSaveable { mutableStateOf("") }
     var agreed by rememberSaveable { mutableStateOf(false) }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var openAgreement by remember { mutableStateOf<AgreementDoc?>(null) }
@@ -102,7 +105,10 @@ fun LoginSheet(
                         isPhoneMode = mode
                         account = ""
                         credential = ""
-                        viewModel.clearError()
+                        registerPassword = ""
+                        registerConfirm = ""
+                        // 切 Tab 一律回到登录表单（注册仅存在于邮箱 Tab）
+                        viewModel.switchToLogin()
                     }
                 }
             )
@@ -149,7 +155,89 @@ fun LoginSheet(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
+            } else if (uiState.isRegisterMode) {
+                // ---- 邮箱注册表单（对齐 Web 注册对话框：邮箱验证码 + 密码 + 确认密码） ----
+                OutlinedTextField(
+                    value = account,
+                    onValueChange = { account = it },
+                    leadingIcon = { Icon(Icons.Filled.Mail, contentDescription = null) },
+                    placeholder = { Text("请输入邮箱地址") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = credential,
+                    onValueChange = { credential = it.filter(Char::isDigit).take(6) },
+                    leadingIcon = { Icon(Icons.Filled.Password, contentDescription = null) },
+                    placeholder = { Text("输入6位邮箱验证码") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    trailingIcon = {
+                        if (uiState.countdownSeconds > 0) {
+                            Text(
+                                text = "${uiState.countdownSeconds}s",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(end = 12.dp)
+                            )
+                        } else {
+                            TextButton(
+                                onClick = { viewModel.sendEmailCode(account) },
+                                enabled = !uiState.isSending
+                            ) {
+                                if (uiState.isSending) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text("获取验证码")
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = registerPassword,
+                    onValueChange = { registerPassword = it },
+                    leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                    placeholder = { Text("设置密码（至少6位）") },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Text(if (passwordVisible) "隐藏" else "显示")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = registerConfirm,
+                    onValueChange = { registerConfirm = it },
+                    leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                    placeholder = { Text("确认密码") },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        credential = ""
+                        registerPassword = ""
+                        registerConfirm = ""
+                        viewModel.switchToLogin()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("已有账号？返回登录", style = MaterialTheme.typography.labelMedium)
+                }
             } else {
+                // ---- 邮箱登录表单 ----
                 OutlinedTextField(
                     value = account,
                     onValueChange = { account = it },
@@ -175,6 +263,16 @@ fun LoginSheet(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        credential = ""
+                        viewModel.switchToRegister()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("没有账号？立即注册", style = MaterialTheme.typography.labelMedium)
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -183,6 +281,17 @@ fun LoginSheet(
                 onToggle = { agreed = it },
                 onOpenDoc = { openAgreement = it }
             )
+
+            if (uiState.notice != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = uiState.notice!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             if (uiState.error != null) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -198,12 +307,17 @@ fun LoginSheet(
             Spacer(modifier = Modifier.height(12.dp))
             Box(contentAlignment = Alignment.Center) {
                 PressablePillButton(
-                    text = if (isPhoneMode) "登录 / 注册" else "登录",
+                    text = when {
+                        isPhoneMode -> "登录 / 注册"
+                        uiState.isRegisterMode -> "立即注册"
+                        else -> "登录"
+                    },
                     onClick = {
-                        if (isPhoneMode) {
-                            viewModel.loginWithSms(account, credential)
-                        } else {
-                            viewModel.loginWithPassword(account, credential)
+                        when {
+                            isPhoneMode -> viewModel.loginWithSms(account, credential)
+                            uiState.isRegisterMode ->
+                                viewModel.register(account, credential, registerPassword, registerConfirm)
+                            else -> viewModel.loginWithPassword(account, credential)
                         }
                     },
                     enabled = agreed && !uiState.isLoading,

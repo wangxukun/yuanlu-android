@@ -80,6 +80,66 @@ class LoginViewModelTest {
         assertEquals("请输入邮箱和密码", viewModel.uiState.value.error)
     }
 
+    // ---------- 邮箱注册 ----------
+
+    @Test
+    fun `sendEmailCode rejects malformed email`() = runTest(dispatcher) {
+        val repository = FakeAuthRepository()
+        val viewModel = LoginViewModel(repository)
+        viewModel.sendEmailCode("not-an-email")
+        runCurrent()
+        assertEquals("请输入正确的邮箱地址", viewModel.uiState.value.error)
+        assertEquals(0, repository.emailCodeCalls)
+    }
+
+    @Test
+    fun `sendEmailCode success starts countdown`() = runTest(dispatcher) {
+        val repository = FakeAuthRepository()
+        val viewModel = LoginViewModel(repository)
+        viewModel.sendEmailCode("user@example.com")
+        runCurrent()
+        assertEquals(1, repository.emailCodeCalls)
+        assertTrue(viewModel.uiState.value.countdownSeconds in 1..60)
+    }
+
+    @Test
+    fun `register validates code length password and confirmation`() = runTest(dispatcher) {
+        val repository = FakeAuthRepository()
+        val viewModel = LoginViewModel(repository)
+        viewModel.register("user@example.com", "123", "123456", "123456")
+        assertEquals("请输入6位邮箱验证码", viewModel.uiState.value.error)
+        viewModel.register("user@example.com", "123456", "123", "123")
+        assertEquals("密码至少需要6位", viewModel.uiState.value.error)
+        viewModel.register("user@example.com", "123456", "123456", "654321")
+        assertEquals("两次输入的密码不一致", viewModel.uiState.value.error)
+        assertEquals(0, repository.signUpCalls)
+    }
+
+    @Test
+    fun `register success auto logs in with same credentials`() = runTest(dispatcher) {
+        val repository = FakeAuthRepository()
+        val viewModel = LoginViewModel(repository)
+        viewModel.register("user@example.com", "123456", "123456", "123456")
+        runCurrent()
+        assertEquals(1, repository.signUpCalls)
+        assertEquals(1, repository.passwordLoginCalls)
+        assertTrue(viewModel.uiState.value.isSuccess)
+        assertEquals("注册成功，正在自动登录", viewModel.uiState.value.notice)
+    }
+
+    @Test
+    fun `register duplicate email surfaces backend message`() = runTest(dispatcher) {
+        val repository = FakeAuthRepository(
+            signUpResult = Result.Error(400, "电子邮箱已被注册")
+        )
+        val viewModel = LoginViewModel(repository)
+        viewModel.register("user@example.com", "123456", "123456", "123456")
+        runCurrent()
+        assertEquals("电子邮箱已被注册", viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.isSuccess)
+        assertEquals(0, repository.passwordLoginCalls)
+    }
+
     @Test
     fun `reset clears state`() = runTest(dispatcher) {
         val viewModel = LoginViewModel(FakeAuthRepository())
@@ -94,17 +154,32 @@ class LoginViewModelTest {
 }
 
 private class FakeAuthRepository(
-    private val smsResult: Result<SmsSendStatus> = Result.Success(SmsSendStatus())
+    private val smsResult: Result<SmsSendStatus> = Result.Success(SmsSendStatus()),
+    private val emailCodeResult: Result<Unit> = Result.Success(Unit),
+    private val signUpResult: Result<Unit> = Result.Success(Unit)
 ) : AuthRepository {
     var smsSendCalls = 0
-    override suspend fun loginWithPassword(email: String, password: String): Result<Unit> =
-        Result.Success(Unit)
+    var emailCodeCalls = 0
+    var signUpCalls = 0
+    var passwordLoginCalls = 0
+    override suspend fun loginWithPassword(email: String, password: String): Result<Unit> {
+        passwordLoginCalls++
+        return Result.Success(Unit)
+    }
     override suspend fun loginWithSms(phone: String, code: String): Result<Unit> =
         Result.Success(Unit)
     override suspend fun logout() {}
     override suspend fun sendSmsCode(phone: String): Result<SmsSendStatus> {
         smsSendCalls++
         return smsResult
+    }
+    override suspend fun sendEmailVerificationCode(email: String): Result<Unit> {
+        emailCodeCalls++
+        return emailCodeResult
+    }
+    override suspend fun signUp(email: String, code: String, password: String): Result<Unit> {
+        signUpCalls++
+        return signUpResult
     }
     override suspend fun getProfile(): Result<UserProfile> =
         Result.Success(UserProfile(userid = "u1", nickname = "Tester"))

@@ -110,6 +110,10 @@ private class FakeAuthRepository(
     }
     override suspend fun sendSmsCode(phone: String): Result<SmsSendStatus> =
         Result.Success(SmsSendStatus())
+    override suspend fun sendEmailVerificationCode(email: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+    override suspend fun signUp(email: String, code: String, password: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
     override suspend fun getProfile(): Result<UserProfile> =
         profileError?.let { Result.Error(401, it) } ?: Result.Success(profileResult)
     override suspend fun updateProfile(

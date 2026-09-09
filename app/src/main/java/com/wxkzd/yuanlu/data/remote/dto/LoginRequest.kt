@@ -18,10 +18,36 @@ data class LoginResponseData(
     val token: String
 )
 
+/**
+ * scene 不给默认值：NetworkModule 的 Json 未开 encodeDefaults（kotlinx 默认 false），
+ * 带默认值的属性序列化时会被整体省略，导致后端 /api/auth/sms/send 因缺 scene
+ * 返回「参数不完整」。调用方必须显式传参。
+ */
 @Serializable
 data class SmsSendRequest(
     val phone: String,
-    val scene: String = "LOGIN"
+    val scene: String
+)
+
+// ---------- 邮箱注册（对齐 Web /api/auth/sign-up 三步流程） ----------
+
+/** POST api/auth/send-verification-code：发送邮箱注册验证码（5 分钟有效） */
+@Serializable
+data class EmailCodeSendRequest(val email: String)
+
+/** POST api/auth/verify-code：校验邮箱验证码 */
+@Serializable
+data class EmailCodeVerifyRequest(val email: String, val code: String)
+
+/** POST api/auth/sign-up：邮箱 + 密码创建账号 */
+@Serializable
+data class SignUpRequest(val email: String, val password: String)
+
+/** 注册三接口的裸响应 { success, message }；业务失败随 4xx/5xx 由 errorMessage() 解析 message */
+@Serializable
+data class AuthActionResponse(
+    val success: Boolean = false,
+    val message: String? = null
 )
 
 /**
