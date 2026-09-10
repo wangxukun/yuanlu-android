@@ -61,6 +61,7 @@ class PronunciationViewModelsTest {
             override suspend fun getNotebook() = Result.Success(
                 SpeechNotebook(isPremium = false, totalErrors = 5)
             )
+            override suspend fun getSpeechDetail(recognitionId: Long) = error("not used")
             override suspend fun getWeakErrors() = error("not used")
             override suspend fun getLeaderboard(period: LeaderboardPeriod, metric: LeaderboardMetric) =
                 error("not used")
@@ -89,6 +90,7 @@ class PronunciationViewModelsTest {
                 episodeId: String, subtitleId: Int, targetText: String, wavBytes: ByteArray
             ) = error("not used")
             override suspend fun getNotebook() = error("not used")
+            override suspend fun getSpeechDetail(recognitionId: Long) = error("not used")
             override suspend fun getWeakErrors() = error("not used")
             override suspend fun getLeaderboard(period: LeaderboardPeriod, metric: LeaderboardMetric): Result<SpeechLeaderboard> {
                 fetchCount++
@@ -140,6 +142,7 @@ class PronunciationViewModelsTest {
                 episodeId: String, subtitleId: Int, targetText: String, wavBytes: ByteArray
             ) = error("not used")
             override suspend fun getNotebook() = error("not used")
+            override suspend fun getSpeechDetail(recognitionId: Long) = error("not used")
             override suspend fun getWeakErrors() = error("not used")
             override suspend fun getLeaderboard(period: LeaderboardPeriod, metric: LeaderboardMetric) =
                 if (fail) Result.Error(401, "请先登录后查看排行榜")

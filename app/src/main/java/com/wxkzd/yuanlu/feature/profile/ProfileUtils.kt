@@ -123,9 +123,15 @@ object ProfileUtils {
         }
     }
 
-    /** 加入日期展示：ISO → yyyy/MM/dd（Web lib/tools formatDate）；解析失败回退"未知日期" */
+    /**
+     * 加入日期展示：ISO → yyyy/MM/dd（Web lib/tools formatDate）。
+     * 空值回退今天：Web personal-center 的 joinDate 初始值即当天，
+     * 资料 404（邮箱新注册）时保持该默认而非"未知日期"；解析失败仍回退"未知日期"。
+     */
     fun formatDate(iso: String?): String {
-        if (iso.isNullOrBlank()) return "未知日期"
+        if (iso.isNullOrBlank()) {
+            return SimpleDateFormat("yyyy/MM/dd", Locale.US).format(Date())
+        }
         return try {
             val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
             parser.timeZone = TimeZone.getTimeZone("UTC")

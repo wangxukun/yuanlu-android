@@ -12,12 +12,26 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_prefs")
+
+/**
+ * 移动端 JWT payload 携带的会话声明（签发口径见 Web core/auth/mobile-token.service.ts）。
+ * 邮箱注册用户在首次编辑资料前没有 user_profile 行（GET api/user/profile 返回 404），
+ * 此时这些声明与 Web 端 session.user 同源，是渲染用户卡（昵称兜底邮箱前缀/角色/邮箱）的数据来源。
+ */
+data class SessionClaims(
+    val userid: String? = null,
+    val email: String? = null,
+    val phone: String? = null,
+    val role: String? = null,
+    val nickname: String? = null
+)
 
 @Singleton
 class TokenStore @Inject constructor(
@@ -60,13 +74,25 @@ class TokenStore @Inject constructor(
         return decodeJwtClaim(getToken(), "userid")
     }
 
+    /** 解码当前 token 的全部会话声明；未登录/解析失败时各字段为 null */
+    suspend fun getSessionClaims(): SessionClaims = SessionClaims(
+        userid = decodeJwtClaim(getToken(), "userid"),
+        email = decodeJwtClaim(getToken(), "email"),
+        phone = decodeJwtClaim(getToken(), "phone"),
+        role = decodeJwtClaim(getToken(), "role"),
+        nickname = decodeJwtClaim(getToken(), "nickname")
+    )
+
     /** 解码 JWT payload（base64url 无填充）中的指定声明 */
     private fun decodeJwtClaim(token: String?, claim: String): String? {
         if (token.isNullOrBlank()) return null
         return try {
             val payload = token.split(".").getOrNull(1) ?: return null
             val json = String(Base64.decode(payload, Base64.URL_SAFE), Charsets.UTF_8)
-            Json.parseToJsonElement(json).jsonObject[claim]?.jsonPrimitive?.content
+            // JsonNull 是 JsonPrimitive 的子类，必须显式排除：
+            // 否则邮箱注册用户的 nickname/phone（JSON null）会解出字符串 "null"
+            val element = Json.parseToJsonElement(json).jsonObject[claim]
+            (element as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
         } catch (e: Exception) {
             null
         }

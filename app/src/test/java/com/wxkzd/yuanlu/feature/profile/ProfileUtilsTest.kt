@@ -150,7 +150,10 @@ class ProfileUtilsTest {
     @Test
     fun `format join date parses iso to yyyy slash mm slash dd`() {
         assertEquals("2026/01/15", ProfileUtils.formatDate("2026-01-15T08:00:00.000Z"))
-        assertEquals("未知日期", ProfileUtils.formatDate(null))
+        // 空值回退今天（Web joinDate 初始值即当天，资料 404 时保持默认）；解析失败仍为未知
+        val today = java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale.US).format(java.util.Date())
+        assertEquals(today, ProfileUtils.formatDate(null))
+        assertEquals(today, ProfileUtils.formatDate(""))
         assertEquals("未知日期", ProfileUtils.formatDate("not-a-date"))
     }
 }

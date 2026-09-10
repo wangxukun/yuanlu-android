@@ -1,5 +1,6 @@
 package com.wxkzd.yuanlu.data.repository
 
+import com.wxkzd.yuanlu.core.auth.SessionClaims
 import com.wxkzd.yuanlu.core.auth.TokenStore
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.AuthApi
@@ -158,6 +159,15 @@ class AuthRepositoryImpl @Inject constructor(
             try {
                 Result.Success(api.userProfile().toDomain())
             } catch (e: HttpException) {
+                // 邮箱注册只建 User 行、不建 user_profile 行（Web sign-up 同口径），
+                // 首次编辑资料（PUT upsert）前该接口恒 404 "Profile not found"。
+                // Web 端「我的」页读 session、「个人中心」页 404 时保留默认资料，
+                // 均不受影响；移动端等价兜底 = 用 JWT 会话声明构造最小资料。
+                if (e.code() == 404) {
+                    tokenStore.getSessionClaims().toFallbackProfile()?.let {
+                        return@withContext Result.Success(it)
+                    }
+                }
                 // requireAuth 的 401 响应体自带 "请先登录" 文案，统一走 errorMessage()
                 Result.Error(e.code(), e.errorMessage())
             } catch (e: IOException) {
@@ -276,4 +286,20 @@ class AuthRepositoryImpl @Inject constructor(
     /** 安全读取 JSON 字段文本：非原始类型（对象/数组/JSON null）返回 null 而非抛异常 */
     private fun JsonElement?.asText(): String? =
         (this as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+}
+
+/**
+ * user_profile 行缺失（404）时的兜底资料：以 JWT 会话声明补齐身份字段，
+ * 昵称/简介/水平/头像留空，由 UI 层回退（昵称 → 邮箱前缀，对齐 Web session 展示口径）。
+ * 声明里连 userid/email 都没有（理论上不可能：签发时必填）则返回 null 走原错误分支。
+ */
+internal fun SessionClaims.toFallbackProfile(): UserProfile? {
+    if (userid.isNullOrBlank() && email.isNullOrBlank()) return null
+    return UserProfile(
+        userid = userid.orEmpty(),
+        nickname = nickname,
+        email = email,
+        phone = phone,
+        role = role
+    )
 }

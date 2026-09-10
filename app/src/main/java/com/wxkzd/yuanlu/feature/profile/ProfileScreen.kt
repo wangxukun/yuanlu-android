@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.CreditCard
@@ -282,16 +283,21 @@ private fun UserCard(uiState: ProfileUiState, onRetry: () -> Unit) {
                                 .clip(CircleShape)
                         )
                     } else {
+                        // 无头像占位：浅灰底 + 人形剪影（Web UserCircleIcon 于 base-200 之上）
                         Box(
                             modifier = Modifier
                                 .size(64.dp)
-                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                    CircleShape
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = uiState.profile?.displayName()?.take(1)?.uppercase() ?: "Y",
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = MaterialTheme.colorScheme.primary
+                            Icon(
+                                imageVector = Icons.Filled.AccountCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(44.dp)
                             )
                         }
                     }
@@ -299,48 +305,50 @@ private fun UserCard(uiState: ProfileUiState, onRetry: () -> Unit) {
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                if (uiState.isLoading) {
-                    ShimmerBox(modifier = Modifier.fillMaxWidth(0.5f).height(18.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ShimmerBox(modifier = Modifier.fillMaxWidth(0.35f).height(13.dp))
-                } else if (uiState.profile != null) {
-                    val profile = uiState.profile
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = profile.displayName(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        RoleBadge(profile.role)
+                when {
+                    uiState.isLoading -> UserCardTextShimmer()
+                    uiState.profile != null -> {
+                        val profile = uiState.profile
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = profile.displayName(),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            RoleBadge(profile.role)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        profile.email?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    profile.email?.let {
+                    uiState.error != null -> {
                         Text(
-                            text = it,
+                            text = uiState.error,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "点击重试",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .clickable { onRetry() }
                         )
                     }
-                } else {
-                    Text(
-                        text = uiState.error ?: "资料加载失败",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Text(
-                        text = "点击重试",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .clickable { onRetry() }
-                    )
+                    // 初次组合、load() 尚未把 isLoading 置真的一帧：按加载中展示，避免错误态闪现
+                    else -> UserCardTextShimmer()
                 }
             }
         }
@@ -351,6 +359,14 @@ private fun UserProfile.displayName(): String {
     return nickname?.takeIf { it.isNotBlank() }
         ?: email?.substringBefore("@")
         ?: "User"
+}
+
+/** 用户卡文字区骨架（昵称行 + 邮箱行） */
+@Composable
+private fun UserCardTextShimmer() {
+    ShimmerBox(modifier = Modifier.fillMaxWidth(0.5f).height(18.dp))
+    Spacer(modifier = Modifier.height(8.dp))
+    ShimmerBox(modifier = Modifier.fillMaxWidth(0.35f).height(13.dp))
 }
 
 /** 角色 badge：管理员=远青 / 高级会员=曙光橙 / 普通用户=灰（对齐 Web） */
