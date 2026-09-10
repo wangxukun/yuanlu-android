@@ -58,7 +58,7 @@ data class SpeechEvalUiState(
     val playing: PlaybackKind = PlaybackKind.NONE,
     val settings: PracticeSettings = PracticeSettings(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    /** 音标模式的逐词音标缓存（word 小写 → US 音标，含斜杠） */
+    /** 音标模式的逐词音标缓存（词键 = 去词上标点后小写，与渲染键同口径 → US 音标，已剥斜杠） */
     val ipaCache: Map<String, String> = emptyMap(),
     /** 盲读模式是否揭示原文：换句复位、新一轮评测结果产出后自动揭示（Web blindRevealed 同口径） */
     val blindRevealed: Boolean = false,
@@ -353,20 +353,26 @@ class SpeechEvalViewModel @Inject constructor(
 
     // ---------- 字幕音标（IPA 文本模式） ----------
 
-    /** 预取当前句（或指定句）的逐词音标；字幕区切到音标模式时由 UI 触发，静默失败 */
+    /**
+     * 预取当前句（或指定句）的逐词音标；字幕区切到音标模式时由 UI 触发，静默失败。
+     * 取词键与渲染键（cleanWordKey）同口径：去词上标点 + 小写 + 去重；缺失词无上限
+     * 逐个并发查词典（Web Promise.all 同口径）——若只取前 N 个，长句后半段会永远
+     * 停留在英文原词（预取不会因缓存更新而重触发）。
+     */
     fun prefetchIpa(subtitle: Subtitle? = null) {
         val sub = subtitle ?: _uiState.value.current ?: return
         if (_uiState.value.settings.textMode != com.wxkzd.yuanlu.domain.model.PracticeTextMode.IPA) return
-        val missing = wordsOf(sub.textEn).filter { it.lowercase() !in _uiState.value.ipaCache }
-        missing.take(6).forEach { word ->
+        val missing = PronunciationUtils.ipaLookupKeys(sub.textEn)
+            .filter { it !in _uiState.value.ipaCache }
+        missing.forEach { word ->
             viewModelScope.launch {
-                when (val r = contentRepository.lookupWord(cleanWord(word))) {
+                when (val r = contentRepository.lookupWord(word)) {
                     is Result.Success -> r.data.phoneticsUs?.let { ipa ->
                         // 词典音标自带斜杠包裹（/sʌm/），入缓存前剥离，句内按空格拼接展示
                         _uiState.update {
                             it.copy(
                                 ipaCache = it.ipaCache +
-                                    (word.lowercase() to PronunciationUtils.stripIpaSlashes(ipa))
+                                    (word to PronunciationUtils.stripIpaSlashes(ipa))
                             )
                         }
                     }
@@ -375,8 +381,6 @@ class SpeechEvalViewModel @Inject constructor(
             }
         }
     }
-
-    private fun wordsOf(text: String): List<String> = text.split(Regex("[\\s]+")).filter { it.any { c -> c.isLetter() } }
 
     private fun cleanWord(word: String): String = word.trim { !it.isLetter() && it != '\'' }
 

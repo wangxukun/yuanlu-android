@@ -55,4 +55,16 @@ object PronunciationUtils {
         .replace("/", "")
         .replace(whitespace, " ")
         .trim()
+
+    /**
+     * 音标模式的取词键口径：按空白切分 → 剥离词上首尾标点（保留撇号）→ 小写 → 去重。
+     * 与卡片渲染键（SpeechEvalCard.cleanWordKey）一致——缓存键必须与渲染键同口径，
+     * 否则 "world." 会以带句点的键入缓存、以 "world" 查不到而回退显示原词；
+     * 返回值同时用作词典查询入参（Web SpeechEvaluationCard 以小写词取 /api/dict 同口径）。
+     */
+    fun ipaLookupKeys(text: String): List<String> = text
+        .split(whitespace)
+        .map { it.trim { !it.isLetter() && it != '\'' }.lowercase() }
+        .filter { it.isNotEmpty() }
+        .distinct()
 }

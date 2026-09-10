@@ -111,4 +111,33 @@ class PronunciationUtilsTest {
         assertEquals("laɪk", PronunciationUtils.stripIpaSlashes("laɪk"))
         assertEquals("gəʊ", PronunciationUtils.stripIpaSlashes(" /gəʊ/ "))
     }
+
+    // ---------- ipaLookupKeys（音标模式取词键：去词上标点 + 小写 + 去重） ----------
+
+    @Test
+    fun `keys match render-side cleanWordKey including punctuated words`() {
+        // "world." 必须产出 "world"，否则带句点的缓存键在渲染侧查不到（音标缺失回退原词）
+        assertEquals(
+            listOf("mushrooms", "are", "a", "popular", "food", "in", "many", "parts", "of", "the", "world"),
+            PronunciationUtils.ipaLookupKeys("Mushrooms are a popular food in many parts of the world.")
+        )
+    }
+
+    @Test
+    fun `deduplicates repeated words`() {
+        assertEquals(
+            listOf("the", "dog", "is", "on", "it"),
+            PronunciationUtils.ipaLookupKeys("The dog is on it, the dog!")
+        )
+    }
+
+    @Test
+    fun `keeps apostrophes inside contractions`() {
+        assertEquals(listOf("i'm", "don't"), PronunciationUtils.ipaLookupKeys("I'm ... don't?"))
+    }
+
+    @Test
+    fun `drops punctuation-only tokens`() {
+        assertEquals(listOf("hello"), PronunciationUtils.ipaLookupKeys("-- hello - ..."))
+    }
 }

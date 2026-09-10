@@ -174,19 +174,25 @@ class WeaknessPracticeViewModel @Inject constructor(
 
     // ---------- 字幕音标（音标文本模式预取） ----------
 
+    /**
+     * 取词键与渲染键（cleanWordKey）同口径：去词上标点 + 小写 + 去重；缺失词无上限
+     * 逐个并发查词典（Web Promise.all 同口径），长句后半段不得停留在英文原词
+     * （与 SpeechEvalViewModel.prefetchIpa 同口径）。
+     */
     fun prefetchIpa(record: WeakSentenceRecord? = null) {
         val target = record ?: _uiState.value.current ?: return
         if (_uiState.value.card.settings.textMode != com.wxkzd.yuanlu.domain.model.PracticeTextMode.IPA) return
-        val missing = wordsOf(target.targetText).filter { it.lowercase() !in _uiState.value.card.ipaCache }
-        missing.take(6).forEach { word ->
+        val missing = PronunciationUtils.ipaLookupKeys(target.targetText)
+            .filter { it !in _uiState.value.card.ipaCache }
+        missing.forEach { word ->
             viewModelScope.launch {
-                when (val r = contentRepository.lookupWord(cleanWord(word))) {
+                when (val r = contentRepository.lookupWord(word)) {
                     is Result.Success -> r.data.phoneticsUs?.let { ipa ->
                         // 词典音标自带斜杠包裹（/sʌm/），入缓存前剥离（与 SpeechEvalViewModel 同口径）
                         updateCard {
                             it.copy(
                                 ipaCache = it.ipaCache +
-                                    (word.lowercase() to PronunciationUtils.stripIpaSlashes(ipa))
+                                    (word to PronunciationUtils.stripIpaSlashes(ipa))
                             )
                         }
                     }
@@ -195,9 +201,6 @@ class WeaknessPracticeViewModel @Inject constructor(
             }
         }
     }
-
-    private fun wordsOf(text: String): List<String> =
-        text.split(Regex("[\\s]+")).filter { it.any { c -> c.isLetter() } }
 
     private fun cleanWord(word: String): String = word.trim { !it.isLetter() && it != '\'' }
 
