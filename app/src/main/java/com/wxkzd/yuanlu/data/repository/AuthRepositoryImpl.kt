@@ -4,6 +4,9 @@ import com.wxkzd.yuanlu.core.auth.SessionClaims
 import com.wxkzd.yuanlu.core.auth.TokenStore
 import com.wxkzd.yuanlu.core.network.Result
 import com.wxkzd.yuanlu.data.remote.AuthApi
+import com.wxkzd.yuanlu.data.remote.dto.BindEmailCodeRequest
+import com.wxkzd.yuanlu.data.remote.dto.BindEmailConfirmRequest
+import com.wxkzd.yuanlu.data.remote.dto.BindPhoneRequest
 import com.wxkzd.yuanlu.data.remote.dto.EmailCodeSendRequest
 import com.wxkzd.yuanlu.data.remote.dto.EmailCodeVerifyRequest
 import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
@@ -136,7 +139,7 @@ class AuthRepositoryImpl @Inject constructor(
                 } else {
                     // 业务失败（含风控/限频）均为 200 + success=false
                     Result.Error(
-                        code = response.code ?: 400,
+                        code = 400,
                         message = if (response.requireCaptcha) {
                             "触发安全验证，请改用邮箱登录"
                         } else {
@@ -261,6 +264,112 @@ class AuthRepositoryImpl @Inject constructor(
                 Result.NetworkError
             } catch (e: Exception) {
                 Result.Error(600, e.message ?: "成就加载失败")
+            }
+        }
+    }
+
+    // ---------- 账号与安全（绑定手机/邮箱 + 注销） ----------
+
+    override suspend fun sendBindPhoneCode(phone: String): Result<SmsSendStatus> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.sendSmsCode(SmsSendRequest(phone = phone, scene = "BIND"))
+                if (response.success) {
+                    Result.Success(SmsSendStatus(requireCaptcha = false))
+                } else {
+                    Result.Error(
+                        code = 400,
+                        message = if (response.requireCaptcha) {
+                            // 原生端无法弹阿里云滑块，提示稍后再试（登录场景才提示改用邮箱登录）
+                            "触发安全验证，请稍后再试"
+                        } else {
+                            response.error ?: "验证码发送失败"
+                        }
+                    )
+                }
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "验证码发送失败")
+            }
+        }
+    }
+
+    override suspend fun bindPhone(phone: String, code: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.bindPhone(BindPhoneRequest(phone, code))
+                if (response.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(400, response.message ?: "绑定失败，请重试")
+                }
+            } catch (e: HttpException) {
+                // 验证码错误/已占用等业务失败随 400 返回 { success:false, error:"..." }
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "绑定失败，请重试")
+            }
+        }
+    }
+
+    override suspend fun sendBindEmailCode(email: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.sendBindEmailCode(BindEmailCodeRequest(email))
+                if (response.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(400, response.message ?: "验证码发送失败，请稍后重试")
+                }
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "验证码发送失败")
+            }
+        }
+    }
+
+    override suspend fun bindEmail(email: String, code: String, password: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.bindEmail(BindEmailConfirmRequest(email, code, password))
+                if (response.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(400, response.message ?: "绑定失败，请重试")
+                }
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "绑定失败，请重试")
+            }
+        }
+    }
+
+    override suspend fun deleteAccount(): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.deleteAccount()
+                if (response.success) {
+                    Result.Success(Unit)
+                } else {
+                    Result.Error(400, response.message ?: "注销失败，请重试")
+                }
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "注销失败，请重试")
             }
         }
     }

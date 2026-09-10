@@ -55,4 +55,21 @@ interface AuthRepository {
 
     /** 成就列表 */
     suspend fun getAchievements(): Result<List<AchievementItem>>
+
+    // ---------- 账号与安全（个人中心 Security tab） ----------
+
+    /** 发送绑定手机验证码（scene=BIND，60s 限频由后端控制） */
+    suspend fun sendBindPhoneCode(phone: String): Result<SmsSendStatus>
+
+    /** 绑定手机号：scene=BIND 验证码校验与手机号碰撞检查在后端完成 */
+    suspend fun bindPhone(phone: String, code: String): Result<Unit>
+
+    /** 发送绑定邮箱验证码（对齐 Web /api/auth/bind-email/send，5 分钟有效） */
+    suspend fun sendBindEmailCode(email: String): Result<Unit>
+
+    /** 绑定邮箱并同时设置登录密码（对齐 Web /api/auth/bind-email/confirm） */
+    suspend fun bindEmail(email: String, code: String, password: String): Result<Unit>
+
+    /** 注销账号：服务端级联删除全部数据；成功后调用方需清理本地会话（logout） */
+    suspend fun deleteAccount(): Result<Unit>
 }

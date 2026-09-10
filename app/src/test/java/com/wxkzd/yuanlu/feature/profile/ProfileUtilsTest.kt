@@ -117,6 +117,45 @@ class ProfileUtilsTest {
         assertEquals("简介不能超过 100 个字", ProfileUtils.validateBio("长".repeat(101)))
     }
 
+    // ---------- 账号与安全：绑定表单校验（对齐 Web BindPhoneForm/BindEmailForm） ----------
+
+    @Test
+    fun `bind phone validation requires eleven digits with valid prefix`() {
+        assertNull(ProfileUtils.validateBindPhone("13812348000"))
+        assertNull(ProfileUtils.validateBindPhone("19912345678"))
+        assertEquals("请输入有效的11位手机号码", ProfileUtils.validateBindPhone("12312345678")) // 12 号段非法
+        assertEquals("请输入有效的11位手机号码", ProfileUtils.validateBindPhone("1381234567"))  // 10 位
+        assertEquals("请输入有效的11位手机号码", ProfileUtils.validateBindPhone("138123456789")) // 12 位
+        assertEquals("请输入有效的11位手机号码", ProfileUtils.validateBindPhone(""))
+    }
+
+    @Test
+    fun `bind email validation uses loose local at domain format`() {
+        assertNull(ProfileUtils.validateBindEmail("a@b.com"))
+        assertNull(ProfileUtils.validateBindEmail("user.name+tag@example.co"))
+        assertEquals("请输入有效的邮箱地址", ProfileUtils.validateBindEmail("plainaddress"))
+        assertEquals("请输入有效的邮箱地址", ProfileUtils.validateBindEmail("a@b"))          // 无点后缀
+        assertEquals("请输入有效的邮箱地址", ProfileUtils.validateBindEmail("a b@example.com")) // 含空格
+        assertEquals("请输入有效的邮箱地址", ProfileUtils.validateBindEmail(""))
+    }
+
+    @Test
+    fun `password criteria requires eight chars letters and digits ascii only`() {
+        // 全达标（Web BindEmailForm 的三项判定）
+        assertTrue(ProfileUtils.passwordCriteria("abcd1234").allMet)
+        // 各项缺失
+        assertFalse(ProfileUtils.passwordCriteria("abcd123").allMet)      // 7 位
+        assertFalse(ProfileUtils.passwordCriteria("12345678").allMet)     // 无字母
+        assertFalse(ProfileUtils.passwordCriteria("abcdefgh").allMet)     // 无数字
+        assertFalse(ProfileUtils.passwordCriteria("").allMet)
+        // 分项判定
+        assertTrue(ProfileUtils.passwordCriteria("12345678").length)
+        assertFalse(ProfileUtils.passwordCriteria("12345678").hasLetter)
+        assertTrue(ProfileUtils.passwordCriteria("12345678").hasNumber)
+        // 中文/全角不计入字母数字（JS [a-zA-Z]/\d 仅 ASCII）
+        assertFalse(ProfileUtils.passwordCriteria("远路播客1234").allMet)
+    }
+
     // ---------- 成就排序 ----------
 
     @Test

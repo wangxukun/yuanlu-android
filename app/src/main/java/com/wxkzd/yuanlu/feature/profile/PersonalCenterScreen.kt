@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Hiking
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Warning
@@ -90,6 +91,7 @@ import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.UserProfile
 import com.wxkzd.yuanlu.domain.model.WeeklyActivityItem
 import com.wxkzd.yuanlu.ui.components.ShimmerBox
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.floor
 import kotlin.math.min
@@ -166,6 +168,9 @@ fun PersonalCenterRoute(
                     onRetry = viewModel::retry,
                     onChangeWeek = viewModel::changeWeek,
                     onOpenEdit = viewModel::openEdit,
+                    onBindPhone = viewModel::openBindPhoneSheet,
+                    onBindEmail = viewModel::openBindEmailSheet,
+                    onDeleteAccount = viewModel::openDeleteConfirm,
                     onComingSoon = { comingSoon(it) }
                 )
             }
@@ -192,6 +197,46 @@ fun PersonalCenterRoute(
             onSave = viewModel::saveProfile
         )
     }
+
+    // ---- 账号与安全弹层：绑定手机/邮箱底部弹窗 + 注销二次确认 ----
+    when (state.securitySheet) {
+        SecuritySheet.BIND_PHONE -> BindPhoneSheet(
+            form = state.securityForm,
+            onClose = viewModel::closeSecuritySheet,
+            onPhoneChange = viewModel::updateSecurityPhone,
+            onCodeChange = viewModel::updateSecurityCode,
+            onSendCode = viewModel::sendSecurityPhoneCode,
+            onSubmit = viewModel::submitBindPhone
+        )
+        SecuritySheet.BIND_EMAIL -> BindEmailSheet(
+            form = state.securityForm,
+            onClose = viewModel::closeSecuritySheet,
+            onEmailChange = viewModel::updateSecurityEmail,
+            onCodeChange = viewModel::updateSecurityCode,
+            onPasswordChange = viewModel::updateSecurityPassword,
+            onConfirmPasswordChange = viewModel::updateSecurityConfirmPassword,
+            onSendCode = viewModel::sendSecurityEmailCode,
+            onSubmit = viewModel::submitBindEmail
+        )
+        null -> Unit
+    }
+
+    if (state.isDeleteConfirmOpen) {
+        DeleteAccountConfirmDialog(
+            isDeleting = state.isDeletingAccount,
+            onConfirm = viewModel::deleteAccount,
+            onDismiss = viewModel::closeDeleteConfirm
+        )
+    }
+
+    // 注销成功：短暂提示后退出个人中心（token 已清，AppNavHost 自动降级游客态）
+    LaunchedEffect(state.isAccountDeleted) {
+        if (state.isAccountDeleted) {
+            scope.launch { snackbarHostState.showSnackbar("账号已成功注销") }
+            delay(1200)
+            onBack()
+        }
+    }
 }
 
 @Composable
@@ -200,6 +245,9 @@ private fun PersonalCenterContent(
     onRetry: () -> Unit,
     onChangeWeek: (Int) -> Unit,
     onOpenEdit: () -> Unit,
+    onBindPhone: () -> Unit,
+    onBindEmail: () -> Unit,
+    onDeleteAccount: () -> Unit,
     onComingSoon: (String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf(CenterTab.JOURNEY) }
@@ -237,7 +285,12 @@ private fun PersonalCenterContent(
                         MilestoneRoadmapCard(state)
                         AchievementsCard(state, onComingSoon)
                     }
-                    CenterTab.SECURITY -> SecuritySection(state.profile, onComingSoon)
+                    CenterTab.SECURITY -> SecuritySection(
+                        profile = state.profile,
+                        onBindPhone = onBindPhone,
+                        onBindEmail = onBindEmail,
+                        onDeleteAccount = onDeleteAccount
+                    )
                 }
             }
         }
@@ -1047,12 +1100,18 @@ private fun AchievementTile(achievement: AchievementItem, modifier: Modifier = M
     }
 }
 
-// ---------- 账号与安全 ----------
+// ---------- 账号与安全（复刻 Web AccountSecurityTab：手机/邮箱/密码 + 注销卡片） ----------
 
 @Composable
-private fun SecuritySection(profile: UserProfile?, onComingSoon: (String) -> Unit) {
+private fun SecuritySection(
+    profile: UserProfile?,
+    onBindPhone: () -> Unit,
+    onBindEmail: () -> Unit,
+    onDeleteAccount: () -> Unit
+) {
     val hasPhone = !profile?.phone.isNullOrBlank()
     val hasRealEmail = !profile?.email.isNullOrBlank() && !ProfileUtils.isPlaceholderEmail(profile?.email)
+    // 密码与真实邮箱绑定设置（Web 同口径：占位邮箱 = 手机号注册、未设密码）
     val passwordSet = !(ProfileUtils.isPlaceholderEmail(profile?.email) && !hasRealEmail)
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1061,30 +1120,11 @@ private fun SecuritySection(profile: UserProfile?, onComingSoon: (String) -> Uni
             tint = MaterialTheme.colorScheme.primary,
             title = "手机号",
             trailing = if (!hasPhone) {
-                { BindButton("绑定手机号") { onComingSoon("绑定手机号") } }
+                { BindButton("绑定手机号", onClick = onBindPhone) }
             } else null
         ) {
             if (hasPhone) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = ProfileUtils.maskPhone(profile?.phone),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text(
-                        text = "已验证",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                VerifiedValueBadge(ProfileUtils.maskPhone(profile?.phone))
             } else {
                 UnboundBadge()
             }
@@ -1094,30 +1134,11 @@ private fun SecuritySection(profile: UserProfile?, onComingSoon: (String) -> Uni
             tint = MaterialTheme.colorScheme.secondary,
             title = "邮箱",
             trailing = if (!hasRealEmail) {
-                { BindButton("绑定邮箱") { onComingSoon("绑定邮箱") } }
+                { BindButton("绑定邮箱", onClick = onBindEmail) }
             } else null
         ) {
             if (hasRealEmail) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = ProfileUtils.maskEmail(profile?.email),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text(
-                        text = "已验证",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                VerifiedValueBadge(ProfileUtils.maskEmail(profile?.email))
             } else {
                 UnboundBadge()
             }
@@ -1127,12 +1148,69 @@ private fun SecuritySection(profile: UserProfile?, onComingSoon: (String) -> Uni
             tint = MaterialTheme.colorScheme.tertiary,
             title = "登录密码"
         ) {
+            if (passwordSet) {
+                Text(
+                    text = "已设置",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "未设置",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "（绑定邮箱时将同时设置）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+        // 注销账号（危险区，Web DeleteAccountCard：红色图标/标题 + 副文案 + 红色按钮）
+        SecurityCard(
+            icon = Icons.Filled.PersonRemove,
+            tint = MaterialTheme.colorScheme.error,
+            title = "注销账号",
+            titleColor = MaterialTheme.colorScheme.error,
+            trailing = {
+                BindButton("注销账号", dangerous = true, onClick = onDeleteAccount)
+            }
+        ) {
             Text(
-                text = if (passwordSet) "已设置" else "未设置",
+                text = "永久删除您的账号及所有相关数据，此操作不可逆。",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
+    }
+}
+
+/** 已绑定展示：脱敏值 + 绿色「已验证」标签 */
+@Composable
+private fun VerifiedValueBadge(maskedValue: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = maskedValue,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(13.dp)
+        )
+        Spacer(modifier = Modifier.width(2.dp))
+        Text(
+            text = "已验证",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 
@@ -1160,6 +1238,7 @@ private fun SecurityCard(
     icon: ImageVector,
     tint: Color,
     title: String,
+    titleColor: Color? = null,
     trailing: (@Composable () -> Unit)? = null,
     subtitle: @Composable () -> Unit
 ) {
@@ -1181,7 +1260,8 @@ private fun SecurityCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = titleColor ?: MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 subtitle()
@@ -1194,19 +1274,17 @@ private fun SecurityCard(
     }
 }
 
-/** 绑定操作胶囊按钮（Web bg-primary-50 圆角胶囊；端内先以即将上线占位） */
+/** 操作胶囊按钮（Web bg-primary-50/error-50 圆角胶囊；dangerous=true 为注销等危险操作红色款） */
 @Composable
-private fun BindButton(label: String, onClick: () -> Unit) {
+private fun BindButton(label: String, dangerous: Boolean = false, onClick: () -> Unit) {
+    val color = if (dangerous) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Text(
         text = label,
         style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.primary,
+        color = color,
         modifier = Modifier
-            .background(
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                RoundedCornerShape(12.dp)
-            )
+            .background(color.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp)
     )

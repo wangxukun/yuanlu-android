@@ -260,9 +260,206 @@ class UserProfileViewModelTest {
         viewModel.onAvatarPicked(byteArrayOf(9))
         assertEquals(before + 1, viewModel.uiState.value.formAvatarVersion)
     }
+
+    // ---------- 账号与安全：绑定手机 ----------
+
+    @Test
+    fun `send bind phone code shows notice and starts countdown`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(profile = profile().copy(phone = null))
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openBindPhoneSheet()
+        viewModel.updateSecurityPhone("13812348000")
+        viewModel.sendSecurityPhoneCode()
+        runCurrent()
+
+        val form = viewModel.uiState.value.securityForm
+        assertEquals("验证码发送成功", form.notice)
+        assertEquals(60, form.countdownSeconds)
+        assertFalse(form.isSendingCode)
+    }
+
+    @Test
+    fun `bind phone success optimistically writes phone closes sheet and toasts`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(profile = profile().copy(phone = null))
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openBindPhoneSheet()
+        viewModel.updateSecurityPhone("13812348000")
+        viewModel.updateSecurityCode("123456")
+        viewModel.submitBindPhone()
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertNull(state.securitySheet)
+        assertEquals("13812348000", state.profile?.phone)
+        assertEquals(1, state.profileRevision)
+        assertEquals("绑定成功", viewModel.toast.value)
+        assertEquals(1, repository.bindPhoneCalls)
+    }
+
+    @Test
+    fun `bind phone invalid phone blocks repository with error`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(profile = profile().copy(phone = null))
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openBindPhoneSheet()
+        viewModel.updateSecurityPhone("12345")
+        viewModel.updateSecurityCode("12345")
+        viewModel.submitBindPhone()
+
+        assertEquals("请输入有效的11位手机号码", viewModel.uiState.value.securityForm.error)
+        assertEquals(0, repository.bindPhoneCalls)
+        assertEquals(SecuritySheet.BIND_PHONE, viewModel.uiState.value.securitySheet)
+    }
+
+    @Test
+    fun `bind phone failure keeps sheet open and surfaces backend message`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(
+            profile = profile().copy(phone = null),
+            bindPhoneError = Result.Error(400, "该手机号已被其他账号绑定")
+        )
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openBindPhoneSheet()
+        viewModel.updateSecurityPhone("13812348000")
+        viewModel.updateSecurityCode("123456")
+        viewModel.submitBindPhone()
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertEquals(SecuritySheet.BIND_PHONE, state.securitySheet)
+        assertFalse(state.securityForm.isSubmitting)
+        assertEquals("该手机号已被其他账号绑定", state.securityForm.error)
+    }
+
+    // ---------- 账号与安全：绑定邮箱 ----------
+
+    @Test
+    fun `bind email success writes real email and replaces placeholder`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(
+            profile = profile().copy(
+                phone = "13812348000",
+                email = "13812348000@placeholder.yuanlu.com"
+            )
+        )
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openBindEmailSheet()
+        viewModel.updateSecurityEmail("walker@yuanlu.com")
+        viewModel.updateSecurityCode("654321")
+        viewModel.updateSecurityPassword("abcd1234")
+        viewModel.updateSecurityConfirmPassword("abcd1234")
+        viewModel.submitBindEmail()
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertNull(state.securitySheet)
+        assertEquals("walker@yuanlu.com", state.profile?.email)
+        assertEquals(1, state.profileRevision)
+        assertEquals("邮箱绑定成功", viewModel.toast.value)
+        assertEquals(1, repository.bindEmailCalls)
+    }
+
+    @Test
+    fun `bind email weak password blocks submit`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(
+            profile = profile().copy(email = "13812348000@placeholder.yuanlu.com")
+        )
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openBindEmailSheet()
+        viewModel.updateSecurityEmail("walker@yuanlu.com")
+        viewModel.updateSecurityCode("654321")
+        viewModel.updateSecurityPassword("abc123")
+        viewModel.updateSecurityConfirmPassword("abc123")
+        viewModel.submitBindEmail()
+
+        assertEquals("密码未达到强度要求", viewModel.uiState.value.securityForm.error)
+        assertEquals(0, repository.bindEmailCalls)
+    }
+
+    @Test
+    fun `bind email mismatched confirmation blocks submit`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(
+            profile = profile().copy(email = "13812348000@placeholder.yuanlu.com")
+        )
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openBindEmailSheet()
+        viewModel.updateSecurityEmail("walker@yuanlu.com")
+        viewModel.updateSecurityCode("654321")
+        viewModel.updateSecurityPassword("abcd1234")
+        viewModel.updateSecurityConfirmPassword("abcd12345")
+        viewModel.submitBindEmail()
+
+        assertEquals("两次输入的密码不一致", viewModel.uiState.value.securityForm.error)
+        assertEquals(0, repository.bindEmailCalls)
+    }
+
+    // ---------- 注销账号 ----------
+
+    @Test
+    fun `delete account success clears session resets state and flags exit`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(profile = profile())
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openDeleteConfirm()
+        viewModel.deleteAccount()
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.isAccountDeleted)
+        assertFalse(state.isDeleteConfirmOpen)
+        assertFalse(state.isDeletingAccount)
+        assertNull(state.profile)
+        assertEquals("账号已成功注销", viewModel.toast.value)
+        assertEquals(1, repository.deleteAccountCalls)
+        // 服务端删除成功后必须清本地 Token（SessionCleared 全局广播）
+        assertEquals(1, repository.logoutCalls)
+    }
+
+    @Test
+    fun `delete account failure closes dialog and toasts error`() = runTest(dispatcher) {
+        val repository = FakeUserAuthRepository(
+            profile = profile(),
+            deleteAccountError = Result.Error(400, "注销失败，请重试")
+        )
+        val viewModel = UserProfileViewModel(repository)
+        viewModel.load()
+        runCurrent()
+
+        viewModel.openDeleteConfirm()
+        viewModel.deleteAccount()
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.isAccountDeleted)
+        assertFalse(state.isDeleteConfirmOpen)
+        assertFalse(state.isDeletingAccount)
+        assertNotNull(state.profile) // 资料保留，仅提示失败
+        assertEquals("注销失败，请重试", viewModel.toast.value)
+        assertEquals(0, repository.logoutCalls)
+    }
 }
 
-/** 个人中心用 Fake：覆盖 profile/stats/activity/achievements 与 updateProfile */
+/** 个人中心用 Fake：覆盖 profile/stats/activity/achievements、updateProfile 与账号安全操作 */
 private class FakeUserAuthRepository(
     private val profile: UserProfile = UserProfile(userid = "u1", nickname = "远路客"),
     private val updatedProfile: UserProfile? = null,
@@ -270,24 +467,52 @@ private class FakeUserAuthRepository(
     private val achievements: List<AchievementItem> = emptyList(),
     private val activity: List<WeeklyActivityItem> = List(7) { WeeklyActivityItem("周${it + 1}", it * 10) },
     var profileError: String? = null,
-    var updateError: Result.Error? = null
+    var updateError: Result.Error? = null,
+    var bindPhoneError: Result.Error? = null,
+    var bindEmailError: Result.Error? = null,
+    var deleteAccountError: Result.Error? = null
 ) : AuthRepository {
     var updateCalls = 0
     var lastAvatar: ByteArray? = null
     var lastLearnLevel: String? = null
     val requestedWeekOffsets = mutableListOf<Int>()
+    var bindPhoneCalls = 0
+    var bindEmailCalls = 0
+    var deleteAccountCalls = 0
+    var logoutCalls = 0
 
     override suspend fun loginWithPassword(email: String, password: String): Result<Unit> =
         Result.Success(Unit)
     override suspend fun loginWithSms(phone: String, code: String): Result<Unit> =
         Result.Success(Unit)
-    override suspend fun logout() = Unit
+    override suspend fun logout() {
+        logoutCalls++
+    }
     override suspend fun sendSmsCode(phone: String): Result<SmsSendStatus> =
         Result.Success(SmsSendStatus())
     override suspend fun sendEmailVerificationCode(email: String): Result<Unit> =
         Result.Error(600, "not implemented in fake")
     override suspend fun signUp(email: String, code: String, password: String): Result<Unit> =
         Result.Error(600, "not implemented in fake")
+    override suspend fun sendBindPhoneCode(phone: String): Result<SmsSendStatus> =
+        Result.Success(SmsSendStatus())
+    override suspend fun bindPhone(phone: String, code: String): Result<Unit> {
+        bindPhoneCalls++
+        bindPhoneError?.let { return it }
+        return Result.Success(Unit)
+    }
+    override suspend fun sendBindEmailCode(email: String): Result<Unit> =
+        Result.Success(Unit)
+    override suspend fun bindEmail(email: String, code: String, password: String): Result<Unit> {
+        bindEmailCalls++
+        bindEmailError?.let { return it }
+        return Result.Success(Unit)
+    }
+    override suspend fun deleteAccount(): Result<Unit> {
+        deleteAccountCalls++
+        deleteAccountError?.let { return it }
+        return Result.Success(Unit)
+    }
     override suspend fun getProfile(): Result<UserProfile> =
         profileError?.let { Result.Error(401, it) } ?: Result.Success(profile)
     override suspend fun updateProfile(

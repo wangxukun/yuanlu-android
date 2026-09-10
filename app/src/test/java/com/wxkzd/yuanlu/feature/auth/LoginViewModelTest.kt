@@ -181,6 +181,16 @@ private class FakeAuthRepository(
         signUpCalls++
         return signUpResult
     }
+    override suspend fun sendBindPhoneCode(phone: String): Result<SmsSendStatus> =
+        Result.Error(600, "not implemented in fake")
+    override suspend fun bindPhone(phone: String, code: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+    override suspend fun sendBindEmailCode(email: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+    override suspend fun bindEmail(email: String, code: String, password: String): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
+    override suspend fun deleteAccount(): Result<Unit> =
+        Result.Error(600, "not implemented in fake")
     override suspend fun getProfile(): Result<UserProfile> =
         Result.Success(UserProfile(userid = "u1", nickname = "Tester"))
     override suspend fun updateProfile(

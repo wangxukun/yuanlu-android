@@ -3,6 +3,9 @@ package com.wxkzd.yuanlu.data.remote
 import com.wxkzd.yuanlu.core.network.ApiResponse
 import com.wxkzd.yuanlu.data.remote.dto.AchievementItemDto
 import com.wxkzd.yuanlu.data.remote.dto.AuthActionResponse
+import com.wxkzd.yuanlu.data.remote.dto.BindEmailCodeRequest
+import com.wxkzd.yuanlu.data.remote.dto.BindEmailConfirmRequest
+import com.wxkzd.yuanlu.data.remote.dto.BindPhoneRequest
 import com.wxkzd.yuanlu.data.remote.dto.EmailCodeSendRequest
 import com.wxkzd.yuanlu.data.remote.dto.EmailCodeVerifyRequest
 import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
@@ -17,6 +20,7 @@ import com.wxkzd.yuanlu.data.remote.dto.WeeklyActivityResponseDto
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Multipart
 import retrofit2.http.POST
@@ -80,4 +84,22 @@ interface AuthApi {
     /** 裸数组：成就列表（unlocked=点亮） */
     @GET("api/user/achievements")
     suspend fun achievements(): List<AchievementItemDto>
+
+    // ---------- 账号与安全（对齐 Web AccountSecurityTab：绑定手机/邮箱 + 注销） ----------
+
+    /** 裸响应 { success, message }；验证码错误/手机号被占用随 400 返回 error */
+    @POST("api/auth/sms/bind")
+    suspend fun bindPhone(@Body request: BindPhoneRequest): AuthActionResponse
+
+    /** 裸响应 { success, message }；邮箱已被占用随 400 返回 error */
+    @POST("api/auth/bind-email/send")
+    suspend fun sendBindEmailCode(@Body request: BindEmailCodeRequest): AuthActionResponse
+
+    /** 裸响应 { success, message }；绑定成功同时设置登录密码 */
+    @POST("api/auth/bind-email/confirm")
+    suspend fun bindEmail(@Body request: BindEmailConfirmRequest): AuthActionResponse
+
+    /** 裸响应 { success, message }；级联删除账号全部数据（头像/录音等 OSS 文件尽力清理） */
+    @DELETE("api/user/self-delete")
+    suspend fun deleteAccount(): AuthActionResponse
 }

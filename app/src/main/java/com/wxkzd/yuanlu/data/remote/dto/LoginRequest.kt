@@ -53,14 +53,29 @@ data class AuthActionResponse(
 /**
  * POST api/auth/sms/send 的响应：业务失败也返回 HTTP 200，
  * 由 requireCaptcha 标识阿里云滑块风控（原生端降级提示改用邮箱登录）。
+ * code 为后端业务标识字符串（RATE_LIMITED/CAPTCHA_REQUIRED/SEND_FAILED），非 HTTP 状态码。
  */
 @Serializable
 data class SmsSendResponse(
     val success: Boolean = false,
-    val code: Int? = null,
+    val code: String? = null,
     val error: String? = null,
     val requireCaptcha: Boolean = false
 )
+
+// ---------- 账号与安全（对齐 Web AccountSecurityTab 的绑定/注销流程） ----------
+
+/** POST api/auth/sms/bind：绑定手机号（scene=BIND 验证码） */
+@Serializable
+data class BindPhoneRequest(val phone: String, val code: String)
+
+/** POST api/auth/bind-email/send：发送绑定邮箱验证码（5 分钟有效） */
+@Serializable
+data class BindEmailCodeRequest(val email: String)
+
+/** POST api/auth/bind-email/confirm：绑定邮箱并写入登录密码 */
+@Serializable
+data class BindEmailConfirmRequest(val email: String, val code: String, val password: String)
 
 /** GET api/user/profile 中嵌套的 User 标量字段（其余字段忽略） */
 @Serializable

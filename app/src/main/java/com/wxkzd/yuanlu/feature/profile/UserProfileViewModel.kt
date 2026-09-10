@@ -10,6 +10,7 @@ import com.wxkzd.yuanlu.domain.model.ProfileStats
 import com.wxkzd.yuanlu.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +21,29 @@ import javax.inject.Inject
 
 /** 编辑资料弹窗的两个表单区块（对齐 Web EditProfileModal 的 tabs） */
 enum class EditProfileTab { PROFILE, GOALS }
+
+/** 账号与安全弹层类型（绑定手机/绑定邮箱，同一时刻仅一个） */
+enum class SecuritySheet { BIND_PHONE, BIND_EMAIL }
+
+/**
+ * 绑定表单状态（手机/邮箱弹层共用骨架，字段按弹层取用）。
+ * 对齐 Web BindPhoneForm/BindEmailForm 的本地 state。
+ */
+data class SecurityFormState(
+    val phone: String = "",
+    val email: String = "",
+    val code: String = "",
+    val password: String = "",
+    val confirmPassword: String = "",
+    val isSendingCode: Boolean = false,
+    /** >0 时「获取验证码」按钮显示倒计时并禁用 */
+    val countdownSeconds: Int = 0,
+    val isSubmitting: Boolean = false,
+    /** 弹层内侵扰提示（校验失败/接口报错，红色） */
+    val error: String? = null,
+    /** 弹层内非侵扰提示（验证码已发送，primary 色） */
+    val notice: String? = null
+)
 
 /**
  * 个人中心状态：统管用户信息、旅程数据、里程碑与编辑资料表单。
@@ -59,7 +83,14 @@ data class UserProfileUiState(
     val formAvatarVersion: Int = 0,
     val nicknameError: String? = null,
     val bioError: String? = null,
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+    // ---- 账号与安全（绑定手机/邮箱弹层 + 注销确认） ----
+    val securitySheet: SecuritySheet? = null,
+    val securityForm: SecurityFormState = SecurityFormState(),
+    val isDeleteConfirmOpen: Boolean = false,
+    val isDeletingAccount: Boolean = false,
+    /** 注销成功一次性标记：Route 观察后提示并退出（token 已清，全局降级游客态） */
+    val isAccountDeleted: Boolean = false
 )
 
 @HiltViewModel
@@ -72,6 +103,8 @@ class UserProfileViewModel @Inject constructor(
 
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
+
+    private var securityCountdownJob: Job? = null
 
     fun consumeToast() {
         _toast.value = null
@@ -310,5 +343,268 @@ class UserProfileViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    // ---------- 账号与安全：绑定手机/邮箱 + 注销 ----------
+
+    fun openBindPhoneSheet() {
+        securityCountdownJob?.cancel()
+        _uiState.update {
+            it.copy(securitySheet = SecuritySheet.BIND_PHONE, securityForm = SecurityFormState())
+        }
+    }
+
+    fun openBindEmailSheet() {
+        securityCountdownJob?.cancel()
+        _uiState.update {
+            it.copy(securitySheet = SecuritySheet.BIND_EMAIL, securityForm = SecurityFormState())
+        }
+    }
+
+    fun closeSecuritySheet() {
+        securityCountdownJob?.cancel()
+        _uiState.update { it.copy(securitySheet = null, securityForm = SecurityFormState()) }
+    }
+
+    // 输入回调：修正任意字段即清除错误（对齐 Web 表单 onChange 时 setError("")）
+
+    fun updateSecurityPhone(value: String) {
+        _uiState.update {
+            it.copy(securityForm = it.securityForm.copy(
+                phone = value.filter(Char::isDigit).take(11), error = null
+            ))
+        }
+    }
+
+    fun updateSecurityEmail(value: String) {
+        _uiState.update {
+            it.copy(securityForm = it.securityForm.copy(email = value.trim(), error = null))
+        }
+    }
+
+    fun updateSecurityCode(value: String) {
+        _uiState.update {
+            it.copy(securityForm = it.securityForm.copy(
+                code = value.filter(Char::isDigit).take(6), error = null
+            ))
+        }
+    }
+
+    fun updateSecurityPassword(value: String) {
+        _uiState.update {
+            it.copy(securityForm = it.securityForm.copy(password = value, error = null))
+        }
+    }
+
+    fun updateSecurityConfirmPassword(value: String) {
+        _uiState.update {
+            it.copy(securityForm = it.securityForm.copy(confirmPassword = value, error = null))
+        }
+    }
+
+    /** 发送绑定手机验证码（scene=BIND；风控/限频文案由仓库层转译） */
+    fun sendSecurityPhoneCode() {
+        val form = _uiState.value.securityForm
+        ProfileUtils.validateBindPhone(form.phone)?.let { error ->
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(error = error)) }
+            return
+        }
+        if (form.isSendingCode || form.countdownSeconds > 0) return
+        _uiState.update {
+            it.copy(securityForm = it.securityForm.copy(isSendingCode = true, error = null, notice = null))
+        }
+        viewModelScope.launch {
+            when (val result = authRepository.sendBindPhoneCode(form.phone)) {
+                is Result.Success -> {
+                    _uiState.update {
+                        it.copy(securityForm = it.securityForm.copy(
+                            isSendingCode = false, notice = "验证码发送成功"
+                        ))
+                    }
+                    startSecurityCountdown()
+                }
+                is Result.Error -> _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(isSendingCode = false, error = result.message))
+                }
+                Result.NetworkError -> _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(isSendingCode = false, error = "网络连接失败，请重试"))
+                }
+            }
+        }
+    }
+
+    /** 发送绑定邮箱验证码（5 分钟有效） */
+    fun sendSecurityEmailCode() {
+        val form = _uiState.value.securityForm
+        ProfileUtils.validateBindEmail(form.email)?.let { error ->
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(error = error)) }
+            return
+        }
+        if (form.isSendingCode || form.countdownSeconds > 0) return
+        _uiState.update {
+            it.copy(securityForm = it.securityForm.copy(isSendingCode = true, error = null, notice = null))
+        }
+        viewModelScope.launch {
+            when (val result = authRepository.sendBindEmailCode(form.email)) {
+                is Result.Success -> {
+                    _uiState.update {
+                        it.copy(securityForm = it.securityForm.copy(
+                            isSendingCode = false, notice = "验证码已发送，请检查您的邮箱"
+                        ))
+                    }
+                    startSecurityCountdown()
+                }
+                is Result.Error -> _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(isSendingCode = false, error = result.message))
+                }
+                Result.NetworkError -> _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(isSendingCode = false, error = "网络连接失败，请重试"))
+                }
+            }
+        }
+    }
+
+    /** 提交绑定手机号：成功后乐观回写本地资料（对齐 Web updateSession） */
+    fun submitBindPhone() {
+        val form = _uiState.value.securityForm
+        if (form.isSubmitting) return
+        ProfileUtils.validateBindPhone(form.phone)?.let { error ->
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(error = error)) }
+            return
+        }
+        if (form.code.length != 6) {
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(error = "请输入6位验证码")) }
+            return
+        }
+        _uiState.update { it.copy(securityForm = it.securityForm.copy(isSubmitting = true, error = null)) }
+        viewModelScope.launch {
+            when (val result = authRepository.bindPhone(form.phone, form.code)) {
+                is Result.Success -> {
+                    // 不重拉资料：新邮箱注册用户无 user_profile 行，GET 会走 404→JWT 兜底，
+                    // 而 JWT 签发于绑定前、不含新手机号，重拉反而丢失；直接本地回写。
+                    securityCountdownJob?.cancel()
+                    _uiState.update {
+                        it.copy(
+                            securitySheet = null,
+                            securityForm = SecurityFormState(),
+                            profile = it.profile?.copy(phone = form.phone),
+                            profileRevision = it.profileRevision + 1
+                        )
+                    }
+                    _toast.value = "绑定成功"
+                }
+                is Result.Error -> _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(isSubmitting = false, error = result.message))
+                }
+                Result.NetworkError -> _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(isSubmitting = false, error = "网络连接失败，请重试"))
+                }
+            }
+        }
+    }
+
+    /** 提交绑定邮箱：同时设置登录密码（手机号注册用户的密码由此而来） */
+    fun submitBindEmail() {
+        val form = _uiState.value.securityForm
+        if (form.isSubmitting) return
+        ProfileUtils.validateBindEmail(form.email)?.let { error ->
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(error = error)) }
+            return
+        }
+        if (form.code.length != 6) {
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(error = "请输入6位邮箱验证码")) }
+            return
+        }
+        if (!ProfileUtils.passwordCriteria(form.password).allMet) {
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(error = "密码未达到强度要求")) }
+            return
+        }
+        if (form.confirmPassword.isEmpty() || form.password != form.confirmPassword) {
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(error = "两次输入的密码不一致")) }
+            return
+        }
+        _uiState.update { it.copy(securityForm = it.securityForm.copy(isSubmitting = true, error = null)) }
+        viewModelScope.launch {
+            when (val result = authRepository.bindEmail(form.email, form.code, form.password)) {
+                is Result.Success -> {
+                    // 同 submitBindPhone：乐观回写而非重拉（JWT 里的占位邮箱已过期）
+                    securityCountdownJob?.cancel()
+                    _uiState.update {
+                        it.copy(
+                            securitySheet = null,
+                            securityForm = SecurityFormState(),
+                            profile = it.profile?.copy(email = form.email),
+                            profileRevision = it.profileRevision + 1
+                        )
+                    }
+                    _toast.value = "邮箱绑定成功"
+                }
+                is Result.Error -> _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(isSubmitting = false, error = result.message))
+                }
+                Result.NetworkError -> _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(isSubmitting = false, error = "网络连接失败，请重试"))
+                }
+            }
+        }
+    }
+
+    private fun startSecurityCountdown() {
+        securityCountdownJob?.cancel()
+        securityCountdownJob = viewModelScope.launch {
+            for (remaining in 60 downTo 1) {
+                _uiState.update {
+                    it.copy(securityForm = it.securityForm.copy(countdownSeconds = remaining))
+                }
+                delay(1000)
+            }
+            _uiState.update { it.copy(securityForm = it.securityForm.copy(countdownSeconds = 0)) }
+        }
+    }
+
+    // ---------- 注销账号 ----------
+
+    fun openDeleteConfirm() {
+        _uiState.update { it.copy(isDeleteConfirmOpen = true) }
+    }
+
+    fun closeDeleteConfirm() {
+        // 注销请求进行中不允许关闭（防止重复提交/状态错乱）
+        if (!_uiState.value.isDeletingAccount) {
+            _uiState.update { it.copy(isDeleteConfirmOpen = false) }
+        }
+    }
+
+    /**
+     * 注销账号：服务端级联删除全部数据（OSS 文件尽力清理）；
+     * 成功后清空本地会话（SessionCleared 全局广播，「我的」Tab 由 onAuthStateChanged 重置），
+     * 并重置本 VM——它是 Activity 作用域共享实例，避免下一账号读到已注销用户的数据。
+     */
+    fun deleteAccount() {
+        if (_uiState.value.isDeletingAccount) return
+        _uiState.update { it.copy(isDeletingAccount = true) }
+        viewModelScope.launch {
+            when (val result = authRepository.deleteAccount()) {
+                is Result.Success -> {
+                    authRepository.logout()
+                    securityCountdownJob?.cancel()
+                    _uiState.value = UserProfileUiState(isAccountDeleted = true)
+                    _toast.value = "账号已成功注销"
+                }
+                is Result.Error -> {
+                    _uiState.update { it.copy(isDeletingAccount = false, isDeleteConfirmOpen = false) }
+                    _toast.value = result.message
+                }
+                Result.NetworkError -> {
+                    _uiState.update { it.copy(isDeletingAccount = false, isDeleteConfirmOpen = false) }
+                    _toast.value = "网络连接失败，请重试"
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        securityCountdownJob?.cancel()
+        super.onCleared()
     }
 }

@@ -101,6 +101,41 @@ object ProfileUtils {
     fun validateBio(bio: String): String? =
         if (bio.length > BIO_MAX_LENGTH) "简介不能超过 $BIO_MAX_LENGTH 个字" else null
 
+    // ---------- 账号与安全：绑定表单校验（对齐 Web BindPhoneForm/BindEmailForm） ----------
+
+    /** 大陆手机号：1 开头 + [3-9] 号段 + 共 11 位（Web BindPhoneForm 同正则） */
+    private val PHONE_REGEX = Regex("^1[3-9]\\d{9}$")
+
+    /** 宽松邮箱格式：局部@域名.后缀（Web BindEmailForm 同正则） */
+    private val BIND_EMAIL_REGEX = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+
+    /** 绑定手机号校验：null = 通过 */
+    fun validateBindPhone(phone: String): String? =
+        if (!PHONE_REGEX.matches(phone)) "请输入有效的11位手机号码" else null
+
+    /** 绑定邮箱校验：null = 通过 */
+    fun validateBindEmail(email: String): String? =
+        if (!BIND_EMAIL_REGEX.matches(email)) "请输入有效的邮箱地址" else null
+
+    /**
+     * 绑定邮箱时同步设置的登录密码强度（Web BindEmailForm 的三项实时判定）：
+     * 8 位以上 / 包含字母 / 包含数字，全部满足才可提交。
+     */
+    data class PasswordCriteria(
+        val length: Boolean = false,
+        val hasLetter: Boolean = false,
+        val hasNumber: Boolean = false
+    ) {
+        val allMet: Boolean get() = length && hasLetter && hasNumber
+    }
+
+    fun passwordCriteria(password: String): PasswordCriteria = PasswordCriteria(
+        length = password.length >= 8,
+        // JS 正则 [a-zA-Z] / \d 均仅匹配 ASCII，中文/全角不算
+        hasLetter = password.any { it in 'a'..'z' || it in 'A'..'Z' },
+        hasNumber = password.any { it in '0'..'9' }
+    )
+
     /** 成就排序：已解锁排前、解锁与否之间保持稳定（Web sort 同为稳定比较） */
     fun sortAchievements(items: List<com.wxkzd.yuanlu.domain.model.AchievementItem>): List<com.wxkzd.yuanlu.domain.model.AchievementItem> =
         items.sortedBy { if (it.unlocked) 0 else 1 }
