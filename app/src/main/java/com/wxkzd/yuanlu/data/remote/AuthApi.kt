@@ -15,6 +15,8 @@ import com.wxkzd.yuanlu.data.remote.dto.ProfileUpdateResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.SignUpRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendResponse
+import com.wxkzd.yuanlu.data.remote.dto.UpdateActivityRequestDto
+import com.wxkzd.yuanlu.data.remote.dto.UpdateActivityResponseDto
 import com.wxkzd.yuanlu.data.remote.dto.UserProfileDto
 import com.wxkzd.yuanlu.data.remote.dto.WeeklyActivityResponseDto
 import okhttp3.MultipartBody
@@ -76,6 +78,13 @@ interface AuthApi {
     /** 裸对象：旅程概览统计（累计时长/连续天数/词汇量/口语评测） */
     @GET("api/user/stats/overview")
     suspend fun statsOverview(): ProfileStatsDto
+
+    /**
+     * 裸 { ok: true }：上报增量收听秒数（播放中每 30s 一批，暂停/停止冲刷余量）。
+     * 服务端累加 user_daily_activity.listeningSeconds 并驱动每日打卡判定，需登录。
+     */
+    @POST("api/auth/update-activity")
+    suspend fun updateActivity(@Body body: UpdateActivityRequestDto): UpdateActivityResponseDto
 
     /** 信封 { weeklyActivity }：weekOffset 0=本周 1=上周 */
     @GET("api/user/stats/weekly-activity")

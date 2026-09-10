@@ -158,6 +158,8 @@ private class FakeAuthRepository(
     private val emailCodeResult: Result<Unit> = Result.Success(Unit),
     private val signUpResult: Result<Unit> = Result.Success(Unit)
 ) : AuthRepository {
+    override suspend fun reportListeningSeconds(seconds: Int): Result<Unit> =
+        Result.Success(Unit)
     var smsSendCalls = 0
     var emailCodeCalls = 0
     var signUpCalls = 0

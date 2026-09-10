@@ -99,6 +99,8 @@ private class FakeAuthRepository(
     var profileError: String? = null,
     profile: UserProfile = UserProfile(userid = "u1", nickname = "远路客")
 ) : AuthRepository {
+    override suspend fun reportListeningSeconds(seconds: Int): Result<Unit> =
+        Result.Success(Unit)
     private val profileResult = profile
     var logoutCalls = 0
     override suspend fun loginWithPassword(email: String, password: String): Result<Unit> =

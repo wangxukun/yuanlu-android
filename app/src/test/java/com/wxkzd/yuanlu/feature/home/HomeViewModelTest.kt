@@ -342,6 +342,8 @@ private class FakeAuthRepository(
     /** 非空时所有端点统一失败（整页错误态用例） */
     private val allFailure: Result<*>? = null
 ) : AuthRepository {
+    override suspend fun reportListeningSeconds(seconds: Int): Result<Unit> =
+        Result.Success(Unit)
     @Suppress("UNCHECKED_CAST")
     private fun <T> result(value: T): Result<T> = (allFailure as? Result<T>) ?: Result.Success(value)
 

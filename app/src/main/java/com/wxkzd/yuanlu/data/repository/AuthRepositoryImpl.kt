@@ -12,6 +12,7 @@ import com.wxkzd.yuanlu.data.remote.dto.EmailCodeVerifyRequest
 import com.wxkzd.yuanlu.data.remote.dto.LoginRequest
 import com.wxkzd.yuanlu.data.remote.dto.SignUpRequest
 import com.wxkzd.yuanlu.data.remote.dto.SmsSendRequest
+import com.wxkzd.yuanlu.data.remote.dto.UpdateActivityRequestDto
 import com.wxkzd.yuanlu.domain.model.AchievementItem
 import com.wxkzd.yuanlu.domain.model.ProfileStats
 import com.wxkzd.yuanlu.domain.model.UserProfile
@@ -250,6 +251,21 @@ class AuthRepositoryImpl @Inject constructor(
                 Result.NetworkError
             } catch (e: Exception) {
                 Result.Error(600, e.message ?: "活动数据加载失败")
+            }
+        }
+    }
+
+    override suspend fun reportListeningSeconds(seconds: Int): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                api.updateActivity(UpdateActivityRequestDto(seconds))
+                Result.Success(Unit)
+            } catch (e: HttpException) {
+                Result.Error(e.code(), e.errorMessage())
+            } catch (e: IOException) {
+                Result.NetworkError
+            } catch (e: Exception) {
+                Result.Error(600, e.message ?: "学习时长上报失败")
             }
         }
     }

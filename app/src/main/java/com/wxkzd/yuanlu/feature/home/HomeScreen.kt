@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,6 +98,12 @@ fun HomeScreen(
     onGoDiscover: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // 重进首页（切 Tab/返回）静默刷新：收听时长由后台心跳累计到服务端，
+    // 需重拉才能让「今日打卡还差 X 分钟」随最新时长减少；冷启动骨架屏阶段跳过
+    LaunchedEffect(Unit) {
+        if (!state.isLoading) viewModel.refresh(silent = true)
+    }
 
     PullToRefreshBox(
         isRefreshing = state.isRefreshing,

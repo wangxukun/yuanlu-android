@@ -53,6 +53,13 @@ interface AuthRepository {
     /** 每日活动图表：weekOffset 0=本周 1=上周 */
     suspend fun getWeeklyActivity(weekOffset: Int): Result<List<WeeklyActivityItem>>
 
+    /**
+     * 上报增量收听秒数（POST api/auth/update-activity，需登录）。
+     * 服务端累加 user_daily_activity.listeningSeconds 并驱动每日打卡判定；
+     * 由 ListeningTimeReporter 在播放中按 30s 批量调用（对齐 Web GlobalAudio 心跳）。
+     */
+    suspend fun reportListeningSeconds(seconds: Int): Result<Unit>
+
     /** 成就列表 */
     suspend fun getAchievements(): Result<List<AchievementItem>>
 

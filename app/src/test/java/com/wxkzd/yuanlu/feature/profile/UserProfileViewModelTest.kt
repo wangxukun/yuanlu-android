@@ -472,6 +472,8 @@ private class FakeUserAuthRepository(
     var bindEmailError: Result.Error? = null,
     var deleteAccountError: Result.Error? = null
 ) : AuthRepository {
+    override suspend fun reportListeningSeconds(seconds: Int): Result<Unit> =
+        Result.Success(Unit)
     var updateCalls = 0
     var lastAvatar: ByteArray? = null
     var lastLearnLevel: String? = null

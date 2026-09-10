@@ -66,3 +66,17 @@ data class ProfileUpdateResponseDto(
     val data: UserProfileDto? = null,
     val error: String? = null
 )
+
+// ---------- 每日学习时长心跳（对齐 Web GlobalAudio 批量上报） ----------
+
+/** POST api/auth/update-activity 请求体：seconds = 增量收听秒数（服务端取整累加） */
+@Serializable
+data class UpdateActivityRequestDto(
+    val seconds: Int
+)
+
+/** 裸 { ok: true } 响应 */
+@Serializable
+data class UpdateActivityResponseDto(
+    val ok: Boolean = false
+)

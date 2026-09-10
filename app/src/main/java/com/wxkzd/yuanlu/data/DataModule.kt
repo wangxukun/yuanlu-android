@@ -2,6 +2,7 @@ package com.wxkzd.yuanlu.data
 
 import com.wxkzd.yuanlu.core.auth.TokenSource
 import com.wxkzd.yuanlu.core.auth.TokenStore
+import com.wxkzd.yuanlu.core.media.ListeningTimeReporter
 import com.wxkzd.yuanlu.core.media.PlayerController
 import com.wxkzd.yuanlu.core.media.ProgressReporter
 import com.wxkzd.yuanlu.data.remote.AuthApi
@@ -85,6 +86,22 @@ object DataModule {
             playerState = playerController.playerState,
             tokenFlow = tokenStore.tokenFlow,
             repository = contentRepository,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        )
+    }
+
+    /** 应用级学习时长上报器：播放心跳累计 30s 批量上报每日收听秒数（打卡数据源） */
+    @Provides
+    @Singleton
+    fun provideListeningTimeReporter(
+        playerController: PlayerController,
+        tokenStore: TokenStore,
+        authRepository: AuthRepository
+    ): ListeningTimeReporter {
+        return ListeningTimeReporter(
+            playerState = playerController.playerState,
+            tokenFlow = tokenStore.tokenFlow,
+            repository = authRepository,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         )
     }
