@@ -1,5 +1,6 @@
 package com.wxkzd.yuanlu
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,7 +67,8 @@ private val BOTTOM_NAV_HEIGHT = 80.dp
  */
 @Composable
 fun MainNavigation(
-    appViewModel: AppViewModel = hiltViewModel()
+    appViewModel: AppViewModel = hiltViewModel(),
+    pendingDeepLink: MutableState<Uri?> = mutableStateOf(null)
 ) {
     val isLoggedIn by appViewModel.isLoggedIn.collectAsStateWithLifecycle()
     val showLoginSheet by appViewModel.showLoginSheet.collectAsStateWithLifecycle()
@@ -77,7 +80,8 @@ fun MainNavigation(
             isLoggedIn = isLoggedIn == true,
             onLogin = appViewModel::showLogin,
             themeMode = themeMode,
-            onThemeModeChange = appViewModel::setThemeMode
+            onThemeModeChange = appViewModel::setThemeMode,
+            pendingDeepLink = pendingDeepLink
         )
     }
 
@@ -92,9 +96,30 @@ private fun AppNavHost(
     isLoggedIn: Boolean,
     onLogin: () -> Unit,
     themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onThemeModeChange: (ThemeMode) -> Unit,
+    pendingDeepLink: MutableState<Uri?> = mutableStateOf(null)
 ) {
     val backStack = rememberNavBackStack(Main)
+
+    // deep link 消费：yuanlu://speech?episodeId=&subtitleId= → 语音评测指定句；
+    // yuanlu://intensive?episodeId=&positionMs= → 精听页。压栈后清空待处理 URI（一次性）。
+    LaunchedEffect(pendingDeepLink.value) {
+        val uri = pendingDeepLink.value ?: return@LaunchedEffect
+        val episodeId = uri.getQueryParameter("episodeId")
+        val key: NavKey? = when (uri.host) {
+            "speech" -> episodeId?.let {
+                SpeechEvalNav(it, uri.getQueryParameter("subtitleId")?.toIntOrNull())
+            }
+            "intensive" -> episodeId?.let {
+                IntensiveListeningNav(it, uri.getQueryParameter("positionMs")?.toLongOrNull() ?: 0L)
+            }
+            else -> null
+        }
+        if (key != null) {
+            backStack.add(key)
+            pendingDeepLink.value = null
+        }
+    }
 
     // 全局播放壳（Activity 作用域）：迷你条可见性/播放状态的唯一来源，
     // 任意页面起播后浮条在全局导航切换间保持一致显示。
